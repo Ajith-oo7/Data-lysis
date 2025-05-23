@@ -1,0 +1,492 @@
+import type { Express } from "express";
+import { createServer, type Server } from "http";
+import { storage } from "./storage";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
+import os from "os";
+import { processData, analyzeQuery, generateExampleQueries } from "./openai";
+import { readExcelFile, saveAsExcel, preprocessData, createTempFilePath } from "./excelProcessor";
+import { processDataWithProfiling, analyzeQueryWithProfiling, generateQueriesFromProfile, profileData } from "./dataProfiler";
+
+// Configure multer for file uploads
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => {
+      cb(null, os.tmpdir());
+    },
+    filename: (req, file, cb) => {
+      const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+      const ext = path.extname(file.originalname);
+      cb(null, `upload-${uniqueSuffix}${ext}`);
+    },
+  }),
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB max file size
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedExtensions = [".xlsx", ".xls", ".csv"];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowedExtensions.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only Excel and CSV files are allowed"));
+    }
+  },
+});
+
+export async function registerRoutes(app: Express): Promise<Server> {
+  // Check OpenAI API key configuration
+  app.get("/api/config/check", (req, res) => {
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(400).json({ message: "OPENAI_API_KEY not configured" });
+    }
+    res.json({ configured: true });
+  });
+
+  // Process a file
+  app.post("/api/process", upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+
+      const preprocessingRules = req.body.preprocessingRules || "";
+      const filePath = req.file.path;
+      
+      console.log(`Processing uploaded file: ${filePath}`);
+      console.log(`File details: ${JSON.stringify({
+        originalname: req.file.originalname,
+        mimetype: req.file.mimetype,
+        size: req.file.size,
+        extension: path.extname(req.file.originalname).toLowerCase()
+      })}`);
+
+      // Build preprocessing options from rules string
+      const preprocessingOptions = {
+        removeEmptyRows: preprocessingRules.includes('remove_empty_rows'),
+        removeEmptyColumns: preprocessingRules.includes('remove_empty_columns'),
+        trimStrings: preprocessingRules.includes('trim_strings'), 
+        convertTypes: preprocessingRules.includes('convert_types'),
+        customRules: preprocessingRules.split('\n').filter(line => 
+          line.trim().startsWith('normalize_case:') || 
+          line.trim().startsWith('replace:')
+        )
+      };
+      
+      // Get the raw data from the file
+      console.log("Reading Excel/CSV file...");
+      const excelData = readExcelFile(filePath);
+      console.log(`Read ${excelData.length} rows from file`);
+      
+      // Apply preprocessing based on the rules
+      console.log("Preprocessing data with options:", preprocessingOptions);
+      const processedData = preprocessData(excelData, preprocessingOptions);
+      console.log(`Processed data has ${processedData.length} rows`);
+      
+      // Debug log the actual data content
+      if (processedData.length > 0) {
+        console.log("Data columns:", Object.keys(processedData[0] || {}).join(', '));
+        console.log("Sample row:", JSON.stringify(processedData[0]));
+      } else {
+        console.log("Warning: No data rows found after preprocessing");
+      }
+      
+      // Convert to CSV string for AI models (OpenAI, etc.)
+      const headers = processedData.length > 0 ? Object.keys(processedData[0] || {}).join(",") : '';
+      const rows = processedData
+        .slice(0, 200) // Limit to 200 rows to avoid token limits
+        .map((row) =>
+          Object.values(row)
+            .map((val) => {
+              if (val === null || val === undefined) return "";
+              if (typeof val === 'string' && val.includes(',')) {
+                // Quote strings with commas
+                return `"${val.replace(/"/g, '""')}"`;
+              }
+              return String(val);
+            })
+            .join(",")
+        );
+      const csvData = headers ? [headers, ...rows].join("\n") : '';
+      
+      // Print the first few lines of CSV to the console for debugging
+      console.log("CSV Headers:", headers);
+      if (rows.length > 0) {
+        console.log("First CSV row:", rows[0]);
+      }
+
+      let results;
+      try {
+        // ===== STEP 1: Try comprehensive data profiling =====
+        try {
+          console.log("Attempting data profiling with intelligent analysis...");
+          results = await processDataWithProfiling(processedData, preprocessingRules);
+          console.log("Data profiling completed successfully");
+          
+          // If we successfully processed with data profiling, continue with these results
+          console.log("Using intelligent profiling results");
+        } catch (profilingError) {
+          console.error("Error in data profiling, falling back to standard analysis:", profilingError);
+        }
+        
+        // ===== STEP 2: Try with OpenAI if profiling fails =====
+        results = await processData(csvData, preprocessingRules);
+        
+        // Check if the results seem potentially generic/incorrect
+        const hasDataPreview = results.dataPreview && 
+                              results.dataPreview.headers && 
+                              results.dataPreview.headers.length > 0;
+                              
+        // If we got suspicious or generic results, fallback to local analysis
+        if (!hasDataPreview || results.summary.rowsProcessed === 0) {
+          console.log("OpenAI results may be generic, falling back to local analysis");
+          // Fallback to local analysis
+          const localAnalysis = await import('./localAnalysis');
+          results = await localAnalysis.processData(csvData, preprocessingRules);
+        }
+      } catch (error) {
+        console.error("Error with OpenAI analysis, falling back to local analysis:", error);
+        // Fallback to local analysis on error
+        const localAnalysis = await import('./localAnalysis');
+        results = await localAnalysis.processData(csvData, preprocessingRules);
+      }
+
+      // Save results and return to client
+      const tempOutputPath = createTempFilePath();
+      saveAsExcel(processedData, tempOutputPath);
+
+      // Save to storage
+      const dataFile = await storage.createDataFile({
+        userId: 1, // Default to user 1 for now, implement proper auth later
+        fileName: tempOutputPath,
+        originalFileName: req.file.originalname,
+        fileSize: req.file.size,
+        uploadedAt: new Date().toISOString(),
+        preprocessingRules,
+        isProcessed: true,
+        processingResults: results,
+      });
+
+      // Add file id to results
+      const resultsWithFileId = {
+        ...results,
+        fileId: dataFile.id,
+      };
+
+      res.json(resultsWithFileId);
+    } catch (error) {
+      console.error("Error processing file:", error);
+      res.status(500).json({ error: "Failed to process file" });
+    }
+  });
+
+  // Query data
+  app.post("/api/query", async (req, res) => {
+    try {
+      const { query, fileId } = req.body;
+
+      if (!query) {
+        return res.status(400).json({ error: "No query provided" });
+      }
+
+      // Get the data file
+      const dataFile = fileId ? await storage.getDataFile(Number(fileId)) : null;
+
+      // If we have a file id, but no file found, return error
+      if (fileId && !dataFile) {
+        return res.status(404).json({ error: "Data file not found" });
+      }
+
+      // If we have a file, read it
+      let data;
+      if (dataFile) {
+        try {
+          data = readExcelFile(dataFile.fileName);
+          
+          // Convert to CSV for OpenAI
+          const headers = Object.keys(data[0] || {}).join(",");
+          const rows = data
+            .slice(0, 200) // Limit to 200 rows to avoid token limits
+            .map(row => 
+              Object.values(row)
+                .map(val => val === null ? "" : String(val))
+                .join(",")
+            );
+          data = [headers, ...rows].join("\n");
+        } catch (error) {
+          console.error("Error reading data file:", error);
+          // If file can't be read, use the processing results data preview
+          if (dataFile.processingResults && typeof dataFile.processingResults === 'object' && 'dataPreview' in dataFile.processingResults) {
+            const { headers, rows } = dataFile.processingResults.dataPreview as { headers: string[], rows: Record<string, any>[] };
+            data = [headers.join(",")];
+            rows.forEach((row: Record<string, any>) => {
+              data.push(Object.values(row).join(","));
+            });
+            data = data.join("\n");
+          } else {
+            return res.status(500).json({ error: "Failed to read data file" });
+          }
+        }
+      } else {
+        // Provide a default/mock dataset for demo purposes
+        data = "ID,Product,Category,Quantity,Price,Date,Region\n" +
+               "1,Laptop Pro,Electronics,5,1299.99,2023-04-15,West\n" +
+               "2,Wireless Earbuds,Audio,12,149.99,2023-04-16,East\n" +
+               "3,Smart Watch,Wearables,8,299.99,2023-04-16,Central\n" +
+               "4,Bluetooth Speaker,Audio,15,79.99,2023-04-17,South\n" +
+               "5,Gaming Console,Gaming,3,499.99,2023-04-18,West";
+      }
+
+      // Debug log the actual data content for queries
+      console.log("Query data first line:", data.split("\n")[0]);
+      
+      let results;
+      
+      // Convert to JSON data for intelligent analysis
+      let jsonData: any[] = [];
+      if (typeof data === "string") {
+        // Parse the CSV string
+        try {
+          const lines = data.split("\n");
+          const headers = lines[0].split(",");
+          
+          jsonData = lines.slice(1).map(line => {
+            const values = line.split(",");
+            const row: Record<string, any> = {};
+            
+            headers.forEach((header, index) => {
+              // Try to convert numeric values
+              const value = values[index] || "";
+              const numValue = Number(value);
+              row[header] = isNaN(numValue) ? value : numValue;
+            });
+            
+            return row;
+          });
+        } catch (error) {
+          console.error("Error parsing CSV data:", error);
+          jsonData = [];
+        }
+      } else if (Array.isArray(data)) {
+        jsonData = data;
+      }
+      
+      try {
+        // ===== STEP 1: Try intelligent profiling-based analysis =====
+        try {
+          console.log("Attempting query analysis with intelligent profiling...");
+          results = await analyzeQueryWithProfiling(query, jsonData);
+          console.log("Intelligent query analysis completed successfully");
+          
+          // If we have valid results, keep them
+          if (results.answer && results.answer.length > 0) {
+            console.log("Using intelligent query results");
+          } else {
+            throw new Error("Intelligent query analysis returned empty results");
+          }
+        } catch (profilingError) {
+          console.error("Error in profiled query analysis, falling back to standard analysis:", profilingError);
+          
+          // ===== STEP 2: Try with OpenAI if profiling fails =====
+          results = await analyzeQuery(query, data);
+          
+          // Check if the results seem potentially generic/incorrect
+          const hasAnswer = results.answer && results.answer.length > 0;
+          const hasSQL = results.sql && results.sql.length > 0;
+          
+          // If results seem generic or missing, fallback to local analysis
+          if (!hasAnswer || !hasSQL) {
+            console.log("OpenAI query results may be generic, falling back to local analysis");
+            // Fallback to local analysis
+            const localAnalysis = await import('./localAnalysis');
+            results = await localAnalysis.analyzeQuery(query, data);
+          }
+        }
+      } catch (error) {
+        console.error("Error with all query analysis methods, falling back to local analysis:", error);
+        // Fallback to local analysis on error
+        const localAnalysis = await import('./localAnalysis');
+        results = await localAnalysis.analyzeQuery(query, data);
+      }
+
+      // Save to query history if we have a file
+      if (dataFile) {
+        await storage.createQueryHistory({
+          dataFileId: dataFile.id,
+          query,
+          sqlQuery: results.sql,
+          answer: results.answer,
+          createdAt: new Date().toISOString(),
+          visualizationType: results.visualization?.type,
+        });
+      }
+
+      res.json(results);
+    } catch (error) {
+      console.error("Error processing query:", error);
+      res.status(500).json({ error: "Failed to process query" });
+    }
+  });
+
+  // Get example queries for a data file
+  app.post("/api/example-queries", async (req, res) => {
+    try {
+      const { fileId } = req.body;
+
+      // Get the data file
+      const dataFile = fileId ? await storage.getDataFile(Number(fileId)) : null;
+
+      // If we have a file id, but no file found, return default queries
+      if (fileId && !dataFile) {
+        return res.json({
+          queries: [
+            "What is the top selling product category?",
+            "Show me sales trends over the last 6 months",
+            "Which region has the highest average order value?",
+          ],
+        });
+      }
+
+      // If we have a file, read it
+      let data;
+      if (dataFile) {
+        try {
+          data = readExcelFile(dataFile.fileName);
+          
+          // Convert to CSV for OpenAI
+          const headers = Object.keys(data[0] || {}).join(",");
+          const rows = data
+            .slice(0, 50) // Just need a sample for examples
+            .map(row => 
+              Object.values(row)
+                .map(val => val === null ? "" : String(val))
+                .join(",")
+            );
+          data = [headers, ...rows].join("\n");
+        } catch (error) {
+          console.error("Error reading data file:", error);
+          // If file can't be read, use the processing results data preview
+          if (dataFile.processingResults && typeof dataFile.processingResults === 'object' && 'dataPreview' in dataFile.processingResults) {
+            const { headers, rows } = dataFile.processingResults.dataPreview as { headers: string[], rows: Record<string, any>[] };
+            data = [headers.join(",")];
+            rows.forEach((row: Record<string, any>) => {
+              data.push(Object.values(row).join(","));
+            });
+            data = data.join("\n");
+          } else {
+            return res.json({
+              queries: [
+                "What is the top selling product category?",
+                "Show me sales trends over the last 6 months",
+                "Which region has the highest average order value?",
+              ],
+            });
+          }
+        }
+      } else {
+        // Provide a default/mock dataset for demo purposes
+        data = "ID,Product,Category,Quantity,Price,Date,Region\n" +
+               "1,Laptop Pro,Electronics,5,1299.99,2023-04-15,West\n" +
+               "2,Wireless Earbuds,Audio,12,149.99,2023-04-16,East\n" +
+               "3,Smart Watch,Wearables,8,299.99,2023-04-16,Central\n" +
+               "4,Bluetooth Speaker,Audio,15,79.99,2023-04-17,South\n" +
+               "5,Gaming Console,Gaming,3,499.99,2023-04-18,West";
+      }
+
+      // Debug log actual data for example queries
+      console.log("Example query data first line:", data.split("\n")[0]);
+      
+      // Convert to JSON data for intelligent analysis
+      let jsonData: any[] = [];
+      if (typeof data === "string") {
+        // Parse the CSV string
+        try {
+          const lines = data.split("\n");
+          const headers = lines[0].split(",");
+          
+          jsonData = lines.slice(1).map(line => {
+            const values = line.split(",");
+            const row: Record<string, any> = {};
+            
+            headers.forEach((header, index) => {
+              // Try to convert numeric values
+              const value = values[index] || "";
+              const numValue = Number(value);
+              row[header] = isNaN(numValue) ? value : numValue;
+            });
+            
+            return row;
+          });
+        } catch (error) {
+          console.error("Error parsing CSV data for example queries:", error);
+          jsonData = [];
+        }
+      } else if (Array.isArray(data)) {
+        jsonData = data;
+      }
+      
+      let queries;
+      try {
+        // ===== STEP 1: Try to generate example queries using data profiling =====
+        try {
+          if (jsonData.length > 0) {
+            console.log("Attempting to generate example queries with intelligent profiling...");
+            // First generate a profile from the data
+            const profile = profileData(jsonData);
+            
+            // Use the profile to generate relevant example queries
+            queries = generateQueriesFromProfile(profile);
+            console.log("Generated queries from profile:", queries);
+            
+            // If we get relevant queries, return them
+            if (queries && queries.length > 0) {
+              return res.json({ queries });
+            } else {
+              throw new Error("No queries generated from profile");
+            }
+          }
+        } catch (profilingError) {
+          console.error("Error generating queries from profile, falling back to OpenAI:", profilingError);
+        }
+        
+        // ===== STEP 2: Try with OpenAI if profiling fails =====
+        queries = await generateExampleQueries(data);
+        
+        // Check if the example queries seem reasonable
+        const hasQueries = queries && queries.length > 0;
+        const containsGenericQueries = queries && queries.some(q => 
+          q.toLowerCase().includes("sales") || 
+          q.toLowerCase().includes("revenue") || 
+          q.toLowerCase().includes("product") ||
+          q.toLowerCase().includes("category"));
+          
+        // If we got generic queries for nutritional data, fallback to local analysis
+        if (!hasQueries || (containsGenericQueries && data.toLowerCase().includes("beverage"))) {
+          console.log("OpenAI example queries may be generic, falling back to local analysis");
+          const localAnalysis = await import('./localAnalysis');
+          queries = await localAnalysis.generateExampleQueries(data);
+        }
+      } catch (error) {
+        console.error("Error generating example queries with OpenAI, falling back to local analysis:", error);
+        // Fallback to local analysis on error
+        const localAnalysis = await import('./localAnalysis');
+        queries = await localAnalysis.generateExampleQueries(data);
+      }
+
+      res.json({ queries });
+    } catch (error) {
+      console.error("Error generating example queries:", error);
+      res.json({
+        queries: [
+          "What is the top selling product category?",
+          "Show me sales trends over the last 6 months",
+          "Which region has the highest average order value?",
+        ],
+      });
+    }
+  });
+
+  const httpServer = createServer(app);
+  return httpServer;
+}

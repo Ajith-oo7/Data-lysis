@@ -1,0 +1,76 @@
+and also the below section ??
+
+Create a LangChain LLMChain that:
+
+Takes column names (and optional sample values)
+
+Sends them to GPT-4 with the domain detection prompt
+
+Returns: {"domain": ..., "reason": ...}
+
+🧱 Requirements
+Install dependencies:
+
+bash
+Copy
+Edit
+pip install openai langchain
+🧰 LangChain Domain Detector Template (Python)
+python
+Copy
+Edit
+from langchain.chat_models import ChatOpenAI
+from langchain.prompts import PromptTemplate
+from langchain.chains import LLMChain
+
+# Step 1: Define the prompt template
+domain_prompt = PromptTemplate(
+    input_variables=["columns", "sample_values"],
+    template="""
+You are a data domain classifier.
+
+You will be given:
+- A list of column names from a tabular dataset
+- Optionally: sample values or metadata
+
+Your task:
+- Predict the most likely domain this dataset belongs to
+- Return a one-word label for the domain (e.g., "Retail", "Healthcare", "Finance", "Education", "Food", "Sports", "Stock Market", etc.)
+- Provide a short explanation for why you chose that domain
+
+Rules:
+- Choose the most specific label possible
+- Use patterns and vocabulary in the column names to infer the context
+- If you’re unsure, return "Unknown"
+
+Now classify this dataset:
+
+Columns: {columns}
+
+Sample Values (optional): {sample_values}
+
+Return your response in this JSON format:
+{{
+  "domain": "...",
+  "reason": "..."
+}}
+"""
+)
+
+# Step 2: Create the chain
+llm = ChatOpenAI(model_name="gpt-4", temperature=0.2)
+domain_chain = LLMChain(llm=llm, prompt=domain_prompt)
+
+# Step 3: Run it with your dataset
+columns = '["Beverage", "Calories", "Caffeine (mg)", "Sugars (g)", "Saturated Fat (g)"]'
+sample_values = '[["Espresso", 5, 150, 0, 0], ["Latte", 190, 75, 18, 3]]'
+
+result = domain_chain.run(columns=columns, sample_values=sample_values)
+print(result)
+✅ Output Example
+json
+Copy
+Edit
+{
+  "domain": "Food",
+  "reason": "Nutritional and product information for beverages, including caffeine and calorie content, is typical of a food menu or nutrition database.}

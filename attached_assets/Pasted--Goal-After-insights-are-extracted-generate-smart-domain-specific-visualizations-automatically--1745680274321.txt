@@ -1,0 +1,182 @@
+ Goal:
+After insights are extracted, generate smart, domain-specific visualizations automatically.
+
+🧠 Visualization Generator Prompt Template
+plaintext
+Copy
+Edit
+You are a data visualization expert.
+
+Given:
+- A dataset (first 10 rows provided)
+- The domain type (e.g., Food, Finance, Education)
+
+Your tasks:
+1. Analyze the dataset
+2. Recommend the 3 best visualization types (e.g., bar chart, pie chart, line chart, heatmap) to understand this data
+3. Suggest x-axis, y-axis, and color encoding for each chart
+4. Write the Python code (using Plotly) to generate these charts
+5. Output everything clearly in markdown sections
+
+Data Preview:
+{data}
+
+Domain:
+{domain}
+📦 How to Implement as LangChain Chain
+python
+Copy
+Edit
+# Import LangChain components
+from langchain.prompts import PromptTemplate
+from langchain.chains import LLMChain
+
+# Create Visualization Prompt
+viz_prompt = PromptTemplate(
+    input_variables=["data", "domain"],
+    template="""
+You are a data visualization expert.
+Dataset preview:
+{data}
+Domain: {domain}
+
+Suggest the 3 best visualizations and provide Plotly Python code for each chart.
+Return in clear sections.
+"""
+)
+
+# Visualization Chain
+viz_chain = LLMChain(llm=llm, prompt=viz_prompt)
+🔥 Now you can call:
+python
+Copy
+Edit
+viz_result = viz_chain.run(data=sample_data, domain=detected_domain)
+print(viz_result)
+🛠️ 2. Deployment-Ready LangChain App Code
+📋 Complete App Structure
+python
+Copy
+Edit
+from langchain.chat_models import ChatOpenAI
+from langchain.prompts import PromptTemplate
+from langchain.chains import LLMChain, SimpleSequentialChain, MultiPromptChain
+import pandas as pd
+
+# Setup LLM
+llm = ChatOpenAI(model_name="gpt-4", temperature=0.2)
+
+# Domain Detection Chain
+domain_prompt = PromptTemplate(
+    input_variables=["columns"],
+    template="""
+You are a dataset domain classifier.
+Here are the column names:
+{columns}
+
+Predict the most likely domain (e.g., Food, Finance, Education, Healthcare).
+Return only the domain name.
+"""
+)
+domain_chain = LLMChain(llm=llm, prompt=domain_prompt)
+
+# Insight Chains for each Domain
+food_prompt = PromptTemplate(
+    input_variables=["data"],
+    template="You are a food data analyst. Analyze:\n{data}\nReturn 5 nutritional insights."
+)
+finance_prompt = PromptTemplate(
+    input_variables=["data"],
+    template="You are a finance data analyst. Analyze:\n{data}\nReturn 5 financial insights."
+)
+education_prompt = PromptTemplate(
+    input_variables=["data"],
+    template="You are an education data analyst. Analyze:\n{data}\nReturn 5 insights about students."
+)
+
+food_chain = LLMChain(llm=llm, prompt=food_prompt)
+finance_chain = LLMChain(llm=llm, prompt=finance_prompt)
+education_chain = LLMChain(llm=llm, prompt=education_prompt)
+
+destination_chains = {
+    "Food": food_chain,
+    "Finance": finance_chain,
+    "Education": education_chain
+}
+
+router_chain = MultiPromptChain(
+    llm=llm,
+    destination_chains=destination_chains,
+    default_chain=food_chain
+)
+
+# Visualization Chain
+viz_prompt = PromptTemplate(
+    input_variables=["data", "domain"],
+    template="You are a data visualization expert. Given dataset:\n{data}\nand domain {domain}, suggest 3 visualizations with Plotly code."
+)
+viz_chain = LLMChain(llm=llm, prompt=viz_prompt)
+
+# App Main Function
+def run_pipeline(csv_file_path):
+    # Load data
+    df = pd.read_csv(csv_file_path)
+    columns = list(df.columns)
+    sample_data = df.head(10).to_markdown()
+
+    # Step 1: Detect Domain
+    detected_domain = domain_chain.run(columns=columns)
+    print(f"Detected Domain: {detected_domain}")
+
+    # Step 2: Run Domain-Specific Insight Generator
+    insights = router_chain.run(input=sample_data, destination=detected_domain)
+    print("\n🔍 Insights:\n", insights)
+
+    # Step 3: Generate Visualizations
+    visualizations = viz_chain.run(data=sample_data, domain=detected_domain)
+    print("\n📈 Visualizations:\n", visualizations)
+
+# Example Run
+run_pipeline("starbucks_menu.csv")
+✅ This full code:
+
+Detects domain
+
+Extracts insights
+
+Suggests visualizations
+
+All based on any CSV file you upload
+
+🛠️ 3. Build Deeper Insight Agents for Each Domain
+Here are custom deeper analysis rules you should embed per domain:
+
+
+Domain	Custom Insight Rules Ideas
+Food	Find item with highest calories, most caffeine, avg sugar per drink
+Finance	Find stock with highest return, max volume traded, biggest loss
+Education	Find student with highest average, subject with worst average, attendance rate
+Healthcare	Top diagnosis categories, avg hospital stay days, readmission rates
+Retail	Top-selling product, avg basket size, return rate by category
+For each domain agent, you can create:
+
+Custom Prompt Templates
+
+Custom Python Functions (if you want to go low-code too)
+
+✨ Final Stack Now Looks Like:
+plaintext
+Copy
+Edit
+User Uploads Data
+    ↓
+[Domain Detector Agent]
+    ↓
+[Domain-Specific Insight Agent]
+    ↓
+[Visualization Generator Agent]
+    ↓
+User Sees:
+    → Insights
+    → Plots
+    → Download Cleaned File + Report

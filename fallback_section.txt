@@ -1,0 +1,86 @@
+def fallback_insights(df: pd.DataFrame, domain_info: Dict[str, Any]) -> List[Dict[str, str]]:
+    """Generate basic insights when AI methods fail"""
+    insights = []
+    
+    # Basic data completeness insight
+    missing_percentages = df.isna().mean() * 100
+    columns_with_missing = missing_percentages[missing_percentages > 0]
+    if len(columns_with_missing) > 0:
+        col_with_most_missing = columns_with_most_missing.index[0]
+        missing_pct = columns_with_most_missing.iloc[0]
+        
+        insights.append({
+            "title": "Data Completeness Issues",
+            "description": f"The dataset has {len(columns_with_missing)} columns with missing values. '{col_with_most_missing}' has the highest percentage of missing values at {missing_pct:.1f}%.",
+            "recommendation": "Consider imputation strategies for missing values or removing columns with excessive missing data."
+        })
+    
+    # Domain-specific insights based on domain type
+    domain = domain_info['domain'].lower()
+    
+    if domain == 'nutrition':
+        # Check for nutritional values
+        nutritional_cols = [col for col in df.columns if any(kw in col.lower() for kw in 
+                                                           ['calorie', 'protein', 'fat', 'carb', 'sugar'])]
+        if nutritional_cols:
+            sample_col = nutritional_cols[0]
+            if pd.api.types.is_numeric_dtype(df[sample_col]):
+                high_val = df[sample_col].max()
+                low_val = df[sample_col].min()
+                insights.append({
+                    "title": f"Nutritional Value Range",
+                    "description": f"The {sample_col} values range from {low_val} to {high_val}, with an average of {df[sample_col].mean():.1f}.",
+                    "recommendation": "Consider analyzing items with extreme nutritional values to understand outliers."
+                })
+    
+    elif domain == 'financial' or domain == 'sales':
+        # Look for monetary columns
+        monetary_cols = [col for col in df.columns if any(kw in col.lower() for kw in 
+                                                        ['price', 'revenue', 'cost', 'sale', 'amount'])]
+        if monetary_cols:
+            sample_col = monetary_cols[0]
+            if pd.api.types.is_numeric_dtype(df[sample_col]):
+                total = df[sample_col].sum()
+                avg = df[sample_col].mean()
+                insights.append({
+                    "title": f"Financial Summary",
+                    "description": f"The total {sample_col} is {total:.2f}, with an average of {avg:.2f} per record.",
+                    "recommendation": "Focus on high-value transactions to maximize business impact."
+                })
+    
+    elif domain == 'healthcare':
+        # Look for age or patient columns
+        demo_cols = [col for col in df.columns if any(kw in col.lower() for kw in 
+                                                    ['age', 'gender', 'patient'])]
+        if demo_cols:
+            sample_col = demo_cols[0]
+            if pd.api.types.is_numeric_dtype(df[sample_col]) and 'age' in sample_col.lower():
+                avg_age = df[sample_col].mean()
+                insights.append({
+                    "title": "Patient Demographics",
+                    "description": f"The average patient age is {avg_age:.1f} years, with a range from {df[sample_col].min()} to {df[sample_col].max()}.",
+                    "recommendation": "Consider age-specific treatment protocols for different patient segments."
+                })
+    
+    # Generic data distribution insight
+    numeric_cols = df.select_dtypes(include=['number']).columns
+    if len(numeric_cols) > 0:
+        sample_col = numeric_cols[0]
+        std_dev = df[sample_col].std()
+        mean_val = df[sample_col].mean()
+        
+        insights.append({
+            "title": f"Value Distribution",
+            "description": f"The {sample_col} has a mean of {mean_val:.2f} with a standard deviation of {std_dev:.2f}.",
+            "recommendation": "Analyze outliers that fall more than 2 standard deviations from the mean."
+        })
+    
+    # Fill in with generic insight if we don't have enough
+    if len(insights) < 2:
+        insights.append({
+            "title": "Dataset Overview",
+            "description": f"This dataset contains {len(df)} rows and {len(df.columns)} columns, with data that appears to be from the {domain} domain.",
+            "recommendation": "Begin exploration by examining the relationships between key variables."
+        })
+    
+    return insights
