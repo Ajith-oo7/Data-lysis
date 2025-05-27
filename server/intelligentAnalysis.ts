@@ -7,11 +7,16 @@
  */
 
 import { OpenAI } from "openai";
+import { Anthropic } from '@anthropic-ai/sdk';
 import { ProcessingResult, QueryResult } from '../shared/schema';
 
 // Initialize OpenAI with API key from environment variables
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
+});
+
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY
 });
 
 // Import local analysis module as fallback
@@ -567,63 +572,134 @@ function selectSmartVisualization(data: any[], patterns: any): any {
  * @param rules Optional preprocessing rules
  * @returns Processing results
  */
-export async function processData(data: any[], rules?: string): Promise<ProcessingResult> {
-  console.log("Using intelligent data processing...");
-  
+export async function processData(data: any[], preprocessingRules: string): Promise<AnalysisResult> {
   try {
-    // Identify data patterns
-    const dataPatterns = identifyDataPatterns(data);
+    // Basic data analysis
+    const summary = analyzeData(data);
     
-    // Generate automatic visualizations based on data patterns
-    const autoVisualizations = generateAutomaticVisualizations(data, dataPatterns);
+    // Generate insights using AI
+    const insights = await generateInsights(data, summary);
     
-    // Calculate data quality metrics
-    const dataQuality = calculateDataQuality(data);
+    // Generate recommendations
+    const recommendations = await generateRecommendations(data, summary, insights);
     
-    // Generate insights from patterns
-    const insights = await generateDataInsights(data, dataPatterns);
-    
-    // Prepare the processed data preview
-    const dataPreview = {
-      columns: Object.keys(data[0] || {}).map(name => ({ name })),
-      rows: data.slice(0, 50), // Show first 50 rows
-      headers: Object.keys(data[0] || {})
-    };
-    
-    // Get column types for reporting
-    const numColumns = Object.entries(dataPatterns.columnTypes)
-      .filter(([_, type]) => type === 'number')
-      .map(([col, _]) => col);
-      
-    const catColumns = Object.entries(dataPatterns.columnTypes)
-      .filter(([_, type]) => type === 'categorical')
-      .map(([col, _]) => col);
-      
+    // Create data preview
+    const dataPreview = createDataPreview(data);
+
     return {
-      summary: {
-        rowsProcessed: data.length,
-        columnsProcessed: Object.keys(data[0] || {}).length,
-        dataQuality: dataQuality.score || 0,
-        missingValues: countMissingValues(data),
-        dataType: dataPatterns.dataType,
-        numericalColumns: numColumns,
-        categoricalColumns: catColumns
-      },
-      charts: autoVisualizations,
+      summary,
       insights,
-      dataPreview,
-      preprocessingInfo: {
-        emptyRowsRemoved: 0,
-        emptyColumnsRemoved: 0,
-        stringsTrimmed: true,
-        typesConverted: true
-      }
+      recommendations,
+      dataPreview
     };
   } catch (error) {
-    console.error("Error in intelligent data processing:", error);
-    // Fallback to simpler analysis
-    return await localAnalysis.processData(JSON.stringify(data), rules);
+    console.error('Error in intelligent analysis:', error);
+    throw error;
   }
+}
+
+function analyzeData(data: any[]): AnalysisResult['summary'] {
+  if (!data || data.length === 0) {
+    throw new Error('No data provided for analysis');
+  }
+
+  const columns = Object.keys(data[0]);
+  const columnTypes: Record<string, string> = {};
+  const missingValues: Record<string, number> = {};
+  const uniqueValues: Record<string, number> = {};
+
+  columns.forEach(column => {
+    // Determine column type
+    const values = data.map(row => row[column]);
+    const nonNullValues = values.filter(v => v !== null && v !== undefined);
+    
+    if (nonNullValues.length === 0) {
+      columnTypes[column] = 'empty';
+    } else if (nonNullValues.every(v => typeof v === 'number')) {
+      columnTypes[column] = 'numeric';
+    } else if (nonNullValues.every(v => v instanceof Date)) {
+      columnTypes[column] = 'date';
+    } else if (nonNullValues.every(v => typeof v === 'boolean')) {
+      columnTypes[column] = 'boolean';
+    } else {
+      columnTypes[column] = 'text';
+    }
+
+    // Count missing values
+    missingValues[column] = values.filter(v => v === null || v === undefined || v === '').length;
+
+    // Count unique values
+    uniqueValues[column] = new Set(nonNullValues).size;
+  });
+
+  return {
+    totalRows: data.length,
+    totalColumns: columns.length,
+    columnTypes,
+    missingValues,
+    uniqueValues
+  };
+}
+
+async function generateInsights(data: any[], summary: AnalysisResult['summary']): Promise<string[]> {
+  try {
+    const prompt = `Analyze this dataset and provide key insights:
+    - Total rows: ${summary.totalRows}
+    - Total columns: ${summary.totalColumns}
+    - Column types: ${JSON.stringify(summary.columnTypes)}
+    - Missing values: ${JSON.stringify(summary.missingValues)}
+    - Unique values: ${JSON.stringify(summary.uniqueValues)}
+    
+    Sample data (first row): ${JSON.stringify(data[0])}
+    
+    Please provide 3-5 key insights about this data.`;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-3-opus-20240229',
+      max_tokens: 1000,
+      messages: [{ role: 'user', content: prompt }]
+    });
+
+    return response.content[0].text.split('\n').filter(line => line.trim());
+  } catch (error) {
+    console.error('Error generating insights:', error);
+    return ['Unable to generate insights at this time.'];
+  }
+}
+
+async function generateRecommendations(
+  data: any[],
+  summary: AnalysisResult['summary'],
+  insights: string[]
+): Promise<string[]> {
+  try {
+    const prompt = `Based on this dataset analysis and insights:
+    - Summary: ${JSON.stringify(summary)}
+    - Insights: ${insights.join('\n')}
+    
+    Please provide 3-5 specific recommendations for data cleaning, analysis, or visualization.`;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-3-opus-20240229',
+      max_tokens: 1000,
+      messages: [{ role: 'user', content: prompt }]
+    });
+
+    return response.content[0].text.split('\n').filter(line => line.trim());
+  } catch (error) {
+    console.error('Error generating recommendations:', error);
+    return ['Unable to generate recommendations at this time.'];
+  }
+}
+
+function createDataPreview(data: any[]): AnalysisResult['dataPreview'] {
+  const headers = Object.keys(data[0] || {});
+  const rows = data.slice(0, 5); // First 5 rows for preview
+
+  return {
+    headers,
+    rows
+  };
 }
 
 /**

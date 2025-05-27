@@ -371,8 +371,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get example queries for a data file
-
-  // Get example queries for a data file
   app.post("/api/example-queries", async (req, res) => {
     try {
       const { fileId } = req.body;
@@ -526,157 +524,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   app.post("/api/visualization/create", async (req, res) => {
     try {
       const { query, data, columnInfo } = req.body;
@@ -796,702 +643,702 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
   
-// Helper function to detect data domain
-/**
- * Detects the domain of a dataset using a hybrid approach.
- * First tries the AI-based approach, then falls back to rule-based if needed.
- *
- * @param data The dataset to analyze
- * @returns Object with domain, confidence score, and detected features
- */
-async function detectDataDomain(data: any[]): Promise<{ domain: string; confidence: number; features: string[]; reason?: string }> {
-  if (!data || data.length === 0) {
-    return { domain: 'unknown', confidence: 0, features: [] };
-  }
-  
-  try {
-    console.log("Attempting AI-based domain detection...");
-    
-    // Extract column names for AI analysis
-    const columns = Object.keys(data[0] || {});
-    
-    // Get a few sample rows (max 3)
-    const sampleValues = data.slice(0, 3).map(row => {
-      // Create a copy of the row with values only (not full objects)
-      const simplifiedRow: Record<string, any> = {};
-      columns.forEach(col => {
-        simplifiedRow[col] = row[col];
-      });
-      return simplifiedRow;
-    });
-    
-    // Use the AI-based domain detection
-    const aiResult = await detectDataDomainAI(columns, sampleValues);
-    
-    console.log(`AI domain detection result: ${aiResult.domain} (confidence: ${aiResult.confidence})`);
-    
-    // If we have a good confident result, use it
-    if (aiResult.confidence > 0.6 && aiResult.domain !== 'Unknown') {
-      // Extract features from the reason text
-      const features = extractFeaturesFromReason(aiResult.reason, columns);
-      
-      return {
-        domain: aiResult.domain.toLowerCase(), // Normalize to lowercase
-        confidence: aiResult.confidence,
-        features,
-        reason: aiResult.reason
-      };
-    } else {
-      console.log("AI domain detection returned low confidence result, falling back to rule-based approach");
+  // Helper function to detect data domain
+  /**
+   * Detects the domain of a dataset using a hybrid approach.
+   * First tries the AI-based approach, then falls back to rule-based if needed.
+   *
+   * @param data The dataset to analyze
+   * @returns Object with domain, confidence score, and detected features
+   */
+  async function detectDataDomain(data: any[]): Promise<{ domain: string; confidence: number; features: string[]; reason?: string }> {
+    if (!data || data.length === 0) {
+      return { domain: 'unknown', confidence: 0, features: [] };
     }
-  } catch (error) {
-    console.error("Error in AI-based domain detection:", error);
-    console.log("Falling back to rule-based domain detection");
-  }
-  
-  // If AI detection fails or returns low confidence, fall back to rule-based approach
-  return fallbackRuleBasedDomainDetection(data);
-}
-
-/**
- * Extract features from the reason text provided by AI
- */
-function extractFeaturesFromReason(reason: string, columns: string[]): string[] {
-  const features: string[] = [];
-  
-  // Common keywords to look for in the reason text
-  const domainKeywords: Record<string, string[]> = {
-    'nutritional': ['calorie', 'protein', 'fat', 'carb', 'sugar', 'vitamin', 'nutrient', 'food', 'diet'],
-    'financial': ['revenue', 'expense', 'profit', 'loss', 'cost', 'budget', 'investment', 'finance', 'money'],
-    'sales': ['sale', 'product', 'customer', 'order', 'inventory', 'retail', 'purchase', 'store'],
-    'healthcare': ['patient', 'diagnosis', 'treatment', 'hospital', 'doctor', 'medication', 'health', 'medical'],
-    'education': ['student', 'grade', 'course', 'teacher', 'class', 'school', 'education', 'academic'],
-    'demographic': ['age', 'gender', 'income', 'education', 'population', 'household', 'ethnicity']
-  };
-  
-  // Look for domain-specific keywords in the reason text
-  Object.entries(domainKeywords).forEach(([domain, keywords]) => {
-    keywords.forEach(keyword => {
-      if (reason.toLowerCase().includes(keyword.toLowerCase())) {
-        features.push(`${domain}:${keyword}`);
+    
+    try {
+      console.log("Attempting AI-based domain detection...");
+      
+      // Extract column names for AI analysis
+      const columns = Object.keys(data[0] || {});
+      
+      // Get a few sample rows (max 3)
+      const sampleValues = data.slice(0, 3).map(row => {
+        // Create a copy of the row with values only (not full objects)
+        const simplifiedRow: Record<string, any> = {};
+        columns.forEach(col => {
+          simplifiedRow[col] = row[col];
+        });
+        return simplifiedRow;
+      });
+      
+      // Use the AI-based domain detection
+      const aiResult = await detectDataDomainAI(columns, sampleValues);
+      
+      console.log(`AI domain detection result: ${aiResult.domain} (confidence: ${aiResult.confidence})`);
+      
+      // If we have a good confident result, use it
+      if (aiResult.confidence > 0.6 && aiResult.domain !== 'Unknown') {
+        // Extract features from the reason text
+        const features = extractFeaturesFromReason(aiResult.reason, columns);
+        
+        return {
+          domain: aiResult.domain.toLowerCase(), // Normalize to lowercase
+          confidence: aiResult.confidence,
+          features,
+          reason: aiResult.reason
+        };
+      } else {
+        console.log("AI domain detection returned low confidence result, falling back to rule-based approach");
       }
-    });
-  });
-  
-  // Also add any column names that directly indicate domains
-  columns.forEach(column => {
-    const columnLower = column.toLowerCase();
+    } catch (error) {
+      console.error("Error in AI-based domain detection:", error);
+      console.log("Falling back to rule-based domain detection");
+    }
+    
+    // If AI detection fails or returns low confidence, fall back to rule-based approach
+    return fallbackRuleBasedDomainDetection(data);
+  }
+
+  /**
+   * Extract features from the reason text provided by AI
+   */
+  function extractFeaturesFromReason(reason: string, columns: string[]): string[] {
+    const features: string[] = [];
+    
+    // Common keywords to look for in the reason text
+    const domainKeywords: Record<string, string[]> = {
+      'nutritional': ['calorie', 'protein', 'fat', 'carb', 'sugar', 'vitamin', 'nutrient', 'food', 'diet'],
+      'financial': ['revenue', 'expense', 'profit', 'loss', 'cost', 'budget', 'investment', 'finance', 'money'],
+      'sales': ['sale', 'product', 'customer', 'order', 'inventory', 'retail', 'purchase', 'store'],
+      'healthcare': ['patient', 'diagnosis', 'treatment', 'hospital', 'doctor', 'medication', 'health', 'medical'],
+      'education': ['student', 'grade', 'course', 'teacher', 'class', 'school', 'education', 'academic'],
+      'demographic': ['age', 'gender', 'income', 'education', 'population', 'household', 'ethnicity']
+    };
+    
+    // Look for domain-specific keywords in the reason text
     Object.entries(domainKeywords).forEach(([domain, keywords]) => {
       keywords.forEach(keyword => {
-        if (columnLower.includes(keyword.toLowerCase())) {
-          features.push(`${domain}:column:${column}`);
+        if (reason.toLowerCase().includes(keyword.toLowerCase())) {
+          features.push(`${domain}:${keyword}`);
         }
       });
     });
-  });
-  
-  return features;
-}
-
-/**
- * Rule-based domain detection as a fallback method
- */
-function fallbackRuleBasedDomainDetection(data: any[]): { domain: string; confidence: number; features: string[] } {
-  const columns = Object.keys(data[0] || {});
-  const features: string[] = [];
-  
-  // Domain detection features
-  const domains = {
-    nutritional: 0,
-    financial: 0, 
-    sales: 0,
-    healthcare: 0,
-    demographic: 0,
-    education: 0
-  };
-  
-  // Nutritional data signals
-  const nutritionalKeywords = ['calorie', 'protein', 'fat', 'carb', 'sugar', 'vitamin', 'mineral', 'serving', 'sodium', 'caffeine'];
-  nutritionalKeywords.forEach(keyword => {
-    if (columns.some(col => col.toLowerCase().includes(keyword))) {
-      domains.nutritional += 1;
-      features.push(`nutritional:${keyword}`);
-    }
-  });
-  
-  // Financial data signals
-  const financialKeywords = ['revenue', 'expense', 'profit', 'loss', 'cost', 'budget', 'investment', 'price', 'payment', 'transaction'];
-  financialKeywords.forEach(keyword => {
-    if (columns.some(col => col.toLowerCase().includes(keyword))) {
-      domains.financial += 1;
-      features.push(`financial:${keyword}`);
-    }
-  });
-  
-  // Sales data signals
-  const salesKeywords = ['sale', 'product', 'customer', 'order', 'inventory', 'store', 'retail', 'purchase', 'discount', 'promotion'];
-  salesKeywords.forEach(keyword => {
-    if (columns.some(col => col.toLowerCase().includes(keyword))) {
-      domains.sales += 1;
-      features.push(`sales:${keyword}`);
-    }
-  });
-  
-  // Healthcare data signals
-  const healthcareKeywords = ['patient', 'diagnosis', 'treatment', 'hospital', 'doctor', 'medication', 'symptom', 'health', 'medical', 'clinic'];
-  healthcareKeywords.forEach(keyword => {
-    if (columns.some(col => col.toLowerCase().includes(keyword))) {
-      domains.healthcare += 1;
-      features.push(`healthcare:${keyword}`);
-    }
-  });
-  
-  // Demographic data signals
-  const demographicKeywords = ['age', 'gender', 'income', 'education', 'population', 'household', 'ethnicity', 'location', 'employment', 'occupation'];
-  demographicKeywords.forEach(keyword => {
-    if (columns.some(col => col.toLowerCase().includes(keyword))) {
-      domains.demographic += 1;
-      features.push(`demographic:${keyword}`);
-    }
-  });
-  
-  // Education data signals
-  const educationKeywords = ['student', 'grade', 'course', 'teacher', 'class', 'school', 'education', 'academic', 'subject', 'test'];
-  educationKeywords.forEach(keyword => {
-    if (columns.some(col => col.toLowerCase().includes(keyword))) {
-      domains.education += 1;
-      features.push(`education:${keyword}`);
-    }
-  });
-  
-  // Find the domain with the highest score
-  const entries = Object.entries(domains) as [string, number][];
-  const maxEntry = entries.reduce((max, entry) => 
-    entry[1] > max[1] ? entry : max, 
-    ['unknown', 0] as [string, number]
-  );
-  
-  // Calculate confidence (0-1)
-  const totalFeatures = Object.values(domains).reduce((sum, val) => sum + val, 0);
-  const confidence = totalFeatures > 0 ? maxEntry[1] / totalFeatures : 0;
-  
-  return {
-    domain: maxEntry[0],
-    confidence: Math.min(1, confidence + (maxEntry[1] / 10)), // Boost confidence based on absolute matches
-    features
-  };
-}
-
-// Helper function to suggest alternative visualizations
-function suggestAlternativeVisualizations(data: any[], query: string, domainInfo: any): any[] {
-  if (!data || data.length === 0) return [];
-  
-  const alternatives = [];
-  const columns = Object.keys(data[0]);
-  const queryLower = query.toLowerCase();
-  
-  // Check if data has time columns
-  const timeColumns = columns.filter(col => 
-    col.toLowerCase().includes('date') || 
-    col.toLowerCase().includes('year') || 
-    col.toLowerCase().includes('month') ||
-    col.toLowerCase().includes('time')
-  );
-  
-  // Check if data has numeric columns
-  const numericColumns = columns.filter(col => 
-    data.some(row => typeof row[col] === 'number' || (!isNaN(parseFloat(row[col])) && row[col] !== ''))
-  );
-  
-  // Check if data has categorical columns
-  const categoricalColumns = columns.filter(col => {
-    if (numericColumns.includes(col)) return false;
     
-    const values = data.map(row => row[col]);
-    const uniqueValues = new Set(values.filter(Boolean)).size;
-    return uniqueValues <= Math.min(20, data.length * 0.5);
-  });
-  
-  // Domain-specific visualization suggestions
-  if (domainInfo.domain === 'nutritional') {
-    alternatives.push({
-      type: 'bar',
-      title: 'Nutritional Content Comparison',
-      description: 'Compare nutritional values across different items'
+    // Also add any column names that directly indicate domains
+    columns.forEach(column => {
+      const columnLower = column.toLowerCase();
+      Object.entries(domainKeywords).forEach(([domain, keywords]) => {
+        keywords.forEach(keyword => {
+          if (columnLower.includes(keyword.toLowerCase())) {
+            features.push(`${domain}:column:${column}`);
+          }
+        });
+      });
     });
+    
+    return features;
+  }
+
+  /**
+   * Rule-based domain detection as a fallback method
+   */
+  function fallbackRuleBasedDomainDetection(data: any[]): { domain: string; confidence: number; features: string[] } {
+    const columns = Object.keys(data[0] || {});
+    const features: string[] = [];
+    
+    // Domain detection features
+    const domains = {
+      nutritional: 0,
+      financial: 0, 
+      sales: 0,
+      healthcare: 0,
+      demographic: 0,
+      education: 0
+    };
+    
+    // Nutritional data signals
+    const nutritionalKeywords = ['calorie', 'protein', 'fat', 'carb', 'sugar', 'vitamin', 'mineral', 'serving', 'sodium', 'caffeine'];
+    nutritionalKeywords.forEach(keyword => {
+      if (columns.some(col => col.toLowerCase().includes(keyword))) {
+        domains.nutritional += 1;
+        features.push(`nutritional:${keyword}`);
+      }
+    });
+    
+    // Financial data signals
+    const financialKeywords = ['revenue', 'expense', 'profit', 'loss', 'cost', 'budget', 'investment', 'price', 'payment', 'transaction'];
+    financialKeywords.forEach(keyword => {
+      if (columns.some(col => col.toLowerCase().includes(keyword))) {
+        domains.financial += 1;
+        features.push(`financial:${keyword}`);
+      }
+    });
+    
+    // Sales data signals
+    const salesKeywords = ['sale', 'product', 'customer', 'order', 'inventory', 'store', 'retail', 'purchase', 'discount', 'promotion'];
+    salesKeywords.forEach(keyword => {
+      if (columns.some(col => col.toLowerCase().includes(keyword))) {
+        domains.sales += 1;
+        features.push(`sales:${keyword}`);
+      }
+    });
+    
+    // Healthcare data signals
+    const healthcareKeywords = ['patient', 'diagnosis', 'treatment', 'hospital', 'doctor', 'medication', 'symptom', 'health', 'medical', 'clinic'];
+    healthcareKeywords.forEach(keyword => {
+      if (columns.some(col => col.toLowerCase().includes(keyword))) {
+        domains.healthcare += 1;
+        features.push(`healthcare:${keyword}`);
+      }
+    });
+    
+    // Demographic data signals
+    const demographicKeywords = ['age', 'gender', 'income', 'education', 'population', 'household', 'ethnicity', 'location', 'employment', 'occupation'];
+    demographicKeywords.forEach(keyword => {
+      if (columns.some(col => col.toLowerCase().includes(keyword))) {
+        domains.demographic += 1;
+        features.push(`demographic:${keyword}`);
+      }
+    });
+    
+    // Education data signals
+    const educationKeywords = ['student', 'grade', 'course', 'teacher', 'class', 'school', 'education', 'academic', 'subject', 'test'];
+    educationKeywords.forEach(keyword => {
+      if (columns.some(col => col.toLowerCase().includes(keyword))) {
+        domains.education += 1;
+        features.push(`education:${keyword}`);
+      }
+    });
+    
+    // Find the domain with the highest score
+    const entries = Object.entries(domains) as [string, number][];
+    const maxEntry = entries.reduce((max, entry) => 
+      entry[1] > max[1] ? entry : max, 
+      ['unknown', 0] as [string, number]
+    );
+    
+    // Calculate confidence (0-1)
+    const totalFeatures = Object.values(domains).reduce((sum, val) => sum + val, 0);
+    const confidence = totalFeatures > 0 ? maxEntry[1] / totalFeatures : 0;
+    
+    return {
+      domain: maxEntry[0],
+      confidence: Math.min(1, confidence + (maxEntry[1] / 10)), // Boost confidence based on absolute matches
+      features
+    };
+  }
+
+  // Helper function to suggest alternative visualizations
+  function suggestAlternativeVisualizations(data: any[], query: string, domainInfo: any): any[] {
+    if (!data || data.length === 0) return [];
+    
+    const alternatives = [];
+    const columns = Object.keys(data[0]);
+    const queryLower = query.toLowerCase();
+    
+    // Check if data has time columns
+    const timeColumns = columns.filter(col => 
+      col.toLowerCase().includes('date') || 
+      col.toLowerCase().includes('year') || 
+      col.toLowerCase().includes('month') ||
+      col.toLowerCase().includes('time')
+    );
+    
+    // Check if data has numeric columns
+    const numericColumns = columns.filter(col => 
+      data.some(row => typeof row[col] === 'number' || (!isNaN(parseFloat(row[col])) && row[col] !== ''))
+    );
+    
+    // Check if data has categorical columns
+    const categoricalColumns = columns.filter(col => {
+      if (numericColumns.includes(col)) return false;
+      
+      const values = data.map(row => row[col]);
+      const uniqueValues = new Set(values.filter(Boolean)).size;
+      return uniqueValues <= Math.min(20, data.length * 0.5);
+    });
+    
+    // Domain-specific visualization suggestions
+    if (domainInfo.domain === 'nutritional') {
+      alternatives.push({
+        type: 'bar',
+        title: 'Nutritional Content Comparison',
+        description: 'Compare nutritional values across different items'
+      });
+      
+      if (numericColumns.length >= 2) {
+        alternatives.push({
+          type: 'scatter',
+          title: 'Nutritional Correlation',
+          description: 'Explore relationship between two nutritional values'
+        });
+      }
+      
+      alternatives.push({
+        type: 'radar',
+        title: 'Nutritional Profile',
+        description: 'View complete nutritional profile across multiple dimensions'
+      });
+    }
+    
+    if (domainInfo.domain === 'financial' || domainInfo.domain === 'sales') {
+      if (timeColumns.length > 0) {
+        alternatives.push({
+          type: 'line',
+          title: 'Trend Analysis',
+          description: 'Track changes over time'
+        });
+      }
+      
+      alternatives.push({
+        type: 'bar',
+        title: 'Comparative Analysis',
+        description: 'Compare values across categories'
+      });
+      
+      if (categoricalColumns.length >= 1 && numericColumns.length >= 1) {
+        alternatives.push({
+          type: 'pie',
+          title: 'Distribution Analysis',
+          description: 'See percentage breakdown across categories'
+        });
+      }
+      
+      if (categoricalColumns.length >= 2 && numericColumns.length >= 1) {
+        alternatives.push({
+          type: 'heatmap',
+          title: 'Cross-category Performance',
+          description: 'Visualize performance across two categorical dimensions'
+        });
+      }
+    }
+    
+    // Generic alternatives based on data structure
+    if (timeColumns.length > 0 && numericColumns.length > 0) {
+      alternatives.push({
+        type: 'line',
+        title: 'Time Series Analysis',
+        description: 'Track changes over time periods'
+      });
+      
+      alternatives.push({
+        type: 'area',
+        title: 'Cumulative Trend',
+        description: 'Show accumulation or overall volume over time'
+      });
+    }
+    
+    if (categoricalColumns.length >= 1 && numericColumns.length >= 1) {
+      alternatives.push({
+        type: 'bar',
+        title: 'Categorical Comparison',
+        description: 'Compare values across categories'
+      });
+    }
     
     if (numericColumns.length >= 2) {
       alternatives.push({
         type: 'scatter',
-        title: 'Nutritional Correlation',
-        description: 'Explore relationship between two nutritional values'
+        title: 'Correlation Analysis',
+        description: 'Explore relationship between two numeric variables'
       });
     }
     
-    alternatives.push({
-      type: 'radar',
-      title: 'Nutritional Profile',
-      description: 'View complete nutritional profile across multiple dimensions'
-    });
-  }
-  
-  if (domainInfo.domain === 'financial' || domainInfo.domain === 'sales') {
-    if (timeColumns.length > 0) {
+    // Query-specific alternatives
+    if (queryLower.includes('compare') || queryLower.includes('comparison')) {
+      alternatives.push({
+        type: 'bar',
+        title: 'Comparative Analysis',
+        description: 'Side-by-side comparison of values'
+      });
+    }
+    
+    if (queryLower.includes('distribution') || queryLower.includes('spread')) {
+      alternatives.push({
+        type: 'histogram',
+        title: 'Distribution Analysis',
+        description: 'Show frequency distribution of values'
+      });
+    }
+    
+    if (queryLower.includes('trend') || queryLower.includes('over time')) {
       alternatives.push({
         type: 'line',
         title: 'Trend Analysis',
-        description: 'Track changes over time'
+        description: 'Track changes over time periods'
       });
     }
     
-    alternatives.push({
-      type: 'bar',
-      title: 'Comparative Analysis',
-      description: 'Compare values across categories'
-    });
-    
-    if (categoricalColumns.length >= 1 && numericColumns.length >= 1) {
+    if (queryLower.includes('proportion') || queryLower.includes('percentage') || queryLower.includes('share')) {
       alternatives.push({
         type: 'pie',
-        title: 'Distribution Analysis',
-        description: 'See percentage breakdown across categories'
+        title: 'Proportion Analysis',
+        description: 'Show relative proportions of categories'
       });
     }
     
-    if (categoricalColumns.length >= 2 && numericColumns.length >= 1) {
-      alternatives.push({
-        type: 'heatmap',
-        title: 'Cross-category Performance',
-        description: 'Visualize performance across two categorical dimensions'
-      });
-    }
-  }
-  
-  // Generic alternatives based on data structure
-  if (timeColumns.length > 0 && numericColumns.length > 0) {
-    alternatives.push({
-      type: 'line',
-      title: 'Time Series Analysis',
-      description: 'Track changes over time periods'
-    });
+    // Make sure we return unique alternative types
+    const uniqueAlternatives = [];
+    const types = new Set();
     
-    alternatives.push({
-      type: 'area',
-      title: 'Cumulative Trend',
-      description: 'Show accumulation or overall volume over time'
-    });
-  }
-  
-  if (categoricalColumns.length >= 1 && numericColumns.length >= 1) {
-    alternatives.push({
-      type: 'bar',
-      title: 'Categorical Comparison',
-      description: 'Compare values across categories'
-    });
-  }
-  
-  if (numericColumns.length >= 2) {
-    alternatives.push({
-      type: 'scatter',
-      title: 'Correlation Analysis',
-      description: 'Explore relationship between two numeric variables'
-    });
-  }
-  
-  // Query-specific alternatives
-  if (queryLower.includes('compare') || queryLower.includes('comparison')) {
-    alternatives.push({
-      type: 'bar',
-      title: 'Comparative Analysis',
-      description: 'Side-by-side comparison of values'
-    });
-  }
-  
-  if (queryLower.includes('distribution') || queryLower.includes('spread')) {
-    alternatives.push({
-      type: 'histogram',
-      title: 'Distribution Analysis',
-      description: 'Show frequency distribution of values'
-    });
-  }
-  
-  if (queryLower.includes('trend') || queryLower.includes('over time')) {
-    alternatives.push({
-      type: 'line',
-      title: 'Trend Analysis',
-      description: 'Track changes over time periods'
-    });
-  }
-  
-  if (queryLower.includes('proportion') || queryLower.includes('percentage') || queryLower.includes('share')) {
-    alternatives.push({
-      type: 'pie',
-      title: 'Proportion Analysis',
-      description: 'Show relative proportions of categories'
-    });
-  }
-  
-  // Make sure we return unique alternative types
-  const uniqueAlternatives = [];
-  const types = new Set();
-  
-  for (const alt of alternatives) {
-    if (!types.has(alt.type)) {
-      types.add(alt.type);
-      uniqueAlternatives.push(alt);
+    for (const alt of alternatives) {
+      if (!types.has(alt.type)) {
+        types.add(alt.type);
+        uniqueAlternatives.push(alt);
+      }
     }
+    
+    return uniqueAlternatives.slice(0, 5); // Limit to 5 alternatives
   }
-  
-  return uniqueAlternatives.slice(0, 5); // Limit to 5 alternatives
-}
 
-// Helper function to validate visualization data to prevent hallucination
-function validateVisualizationData(visualization: any, data: any[]): { valid: boolean; issues: string[] } {
-  const issues: string[] = [];
-  
-  // Skip validation if visualization or data is missing
-  if (!visualization || !data || data.length === 0) {
-    return { valid: false, issues: ['Missing visualization or data'] };
-  }
-  
-  // Get data columns
-  const dataColumns = data.length > 0 ? Object.keys(data[0]) : [];
-  
-  // Basic validation checks
-  if (!visualization.type) {
-    issues.push('Missing or invalid chart type');
-  } else if (!['bar', 'line', 'pie', 'scatter', 'area', 'radar', 'heatmap', 'box', 'histogram'].includes(visualization.type)) {
-    issues.push(`Chart type "${visualization.type}" may not be supported`);
-  }
-  
-  if (!visualization.title || typeof visualization.title !== 'string') {
-    issues.push('Missing or invalid chart title');
-  }
-  
-  // Check if visualization references columns that don't exist
-  if (visualization.xAxis && !dataColumns.includes(visualization.xAxis)) {
-    issues.push(`X-axis column "${visualization.xAxis}" does not exist in data`);
-  }
-  
-  if (visualization.yAxis && !dataColumns.includes(visualization.yAxis)) {
-    issues.push(`Y-axis column "${visualization.yAxis}" does not exist in data`);
-  }
-  
-  // Validate data array
-  if (!visualization.data || !Array.isArray(visualization.data)) {
-    issues.push('Missing or invalid data array');
-  } else if (visualization.data.length === 0) {
-    issues.push('Empty data array');
-  } else {
-    // Check data structure
-    const firstItem = visualization.data[0];
-    if (!firstItem.category && !firstItem.name) {
-      issues.push('Data items missing category/name property');
+  // Helper function to validate visualization data to prevent hallucination
+  function validateVisualizationData(visualization: any, data: any[]): { valid: boolean; issues: string[] } {
+    const issues: string[] = [];
+    
+    // Skip validation if visualization or data is missing
+    if (!visualization || !data || data.length === 0) {
+      return { valid: false, issues: ['Missing visualization or data'] };
     }
     
-    if (typeof firstItem.value === 'undefined') {
-      issues.push('Data items missing value property');
+    // Get data columns
+    const dataColumns = data.length > 0 ? Object.keys(data[0]) : [];
+    
+    // Basic validation checks
+    if (!visualization.type) {
+      issues.push('Missing or invalid chart type');
+    } else if (!['bar', 'line', 'pie', 'scatter', 'area', 'radar', 'heatmap', 'box', 'histogram'].includes(visualization.type)) {
+      issues.push(`Chart type "${visualization.type}" may not be supported`);
     }
-  }
-  
-  // Check Plotly specific data
-  if (visualization.plotlyJson) {
-    if (!visualization.plotlyJson.data || !Array.isArray(visualization.plotlyJson.data)) {
-      issues.push('Missing or invalid plotly data array');
-    } else if (visualization.plotlyJson.data.length === 0) {
-      issues.push('Empty plotly data array');
+    
+    if (!visualization.title || typeof visualization.title !== 'string') {
+      issues.push('Missing or invalid chart title');
+    }
+    
+    // Check if visualization references columns that don't exist
+    if (visualization.xAxis && !dataColumns.includes(visualization.xAxis)) {
+      issues.push(`X-axis column "${visualization.xAxis}" does not exist in data`);
+    }
+    
+    if (visualization.yAxis && !dataColumns.includes(visualization.yAxis)) {
+      issues.push(`Y-axis column "${visualization.yAxis}" does not exist in data`);
+    }
+    
+    // Validate data array
+    if (!visualization.data || !Array.isArray(visualization.data)) {
+      issues.push('Missing or invalid data array');
+    } else if (visualization.data.length === 0) {
+      issues.push('Empty data array');
     } else {
-      const firstTrace = visualization.plotlyJson.data[0];
-      
-      // Check if data has x and y properties
-      if (!firstTrace.x || !Array.isArray(firstTrace.x)) {
-        issues.push('Missing or invalid x values in plotly data');
+      // Check data structure
+      const firstItem = visualization.data[0];
+      if (!firstItem.category && !firstItem.name) {
+        issues.push('Data items missing category/name property');
       }
       
-      if (!firstTrace.y || !Array.isArray(firstTrace.y)) {
-        issues.push('Missing or invalid y values in plotly data');
-      }
-      
-      if (!firstTrace.type) {
-        issues.push('Missing chart type in plotly data');
+      if (typeof firstItem.value === 'undefined') {
+        issues.push('Data items missing value property');
       }
     }
     
-    if (!visualization.plotlyJson.layout) {
-      issues.push('Missing plotly layout');
-    } else {
-      if (!visualization.plotlyJson.layout.title) {
-        issues.push('Missing title in plotly layout');
+    // Check Plotly specific data
+    if (visualization.plotlyJson) {
+      if (!visualization.plotlyJson.data || !Array.isArray(visualization.plotlyJson.data)) {
+        issues.push('Missing or invalid plotly data array');
+      } else if (visualization.plotlyJson.data.length === 0) {
+        issues.push('Empty plotly data array');
+      } else {
+        const firstTrace = visualization.plotlyJson.data[0];
+        
+        // Check if data has x and y properties
+        if (!firstTrace.x || !Array.isArray(firstTrace.x)) {
+          issues.push('Missing or invalid x values in plotly data');
+        }
+        
+        if (!firstTrace.y || !Array.isArray(firstTrace.y)) {
+          issues.push('Missing or invalid y values in plotly data');
+        }
+        
+        if (!firstTrace.type) {
+          issues.push('Missing chart type in plotly data');
+        }
       }
       
-      if (!visualization.plotlyJson.layout.xaxis || !visualization.plotlyJson.layout.xaxis.title) {
-        issues.push('Missing x-axis title in plotly layout');
-      }
-      
-      if (!visualization.plotlyJson.layout.yaxis || !visualization.plotlyJson.layout.yaxis.title) {
-        issues.push('Missing y-axis title in plotly layout');
-      }
-    }
-  }
-  
-  // Validate insights
-  if (!visualization.insights) {
-    issues.push('Missing insights');
-  } else if (!Array.isArray(visualization.insights) && typeof visualization.insights !== 'string') {
-    issues.push('Insights should be an array or string');
-  }
-  
-  // Check for HTML content
-  if (!visualization.htmlContent) {
-    issues.push('Missing HTML content for rendering');
-  }
-  
-  // Check series data keys
-  if (visualization.series) {
-    for (const series of visualization.series) {
-      if (series.dataKey && !dataColumns.includes(series.dataKey)) {
-        issues.push(`Series data key "${series.dataKey}" does not exist in data`);
+      if (!visualization.plotlyJson.layout) {
+        issues.push('Missing plotly layout');
+      } else {
+        if (!visualization.plotlyJson.layout.title) {
+          issues.push('Missing title in plotly layout');
+        }
+        
+        if (!visualization.plotlyJson.layout.xaxis || !visualization.plotlyJson.layout.xaxis.title) {
+          issues.push('Missing x-axis title in plotly layout');
+        }
+        
+        if (!visualization.plotlyJson.layout.yaxis || !visualization.plotlyJson.layout.yaxis.title) {
+          issues.push('Missing y-axis title in plotly layout');
+        }
       }
     }
-  }
-  
-  // Check for category hallucinations
-  if (visualization.data && Array.isArray(visualization.data) && visualization.xAxis) {
-    // Check if visualization data has more categories than actual data
-    const visualizationCategories = new Set<string | number>();
-    visualization.data.forEach((item: { name?: string | number; category?: string | number; value: number }) => {
-      if (item.name) {
-        visualizationCategories.add(item.name);
-      } else if (item.category) {
-        visualizationCategories.add(item.category);
-      }
-    });
     
-    if (visualizationCategories.size > 0) {
-      const actualCategories = new Set();
-      data.forEach(row => {
-        if (row[visualization.xAxis] !== undefined && row[visualization.xAxis] !== null) {
-          actualCategories.add(row[visualization.xAxis]);
+    // Validate insights
+    if (!visualization.insights) {
+      issues.push('Missing insights');
+    } else if (!Array.isArray(visualization.insights) && typeof visualization.insights !== 'string') {
+      issues.push('Insights should be an array or string');
+    }
+    
+    // Check for HTML content
+    if (!visualization.htmlContent) {
+      issues.push('Missing HTML content for rendering');
+    }
+    
+    // Check series data keys
+    if (visualization.series) {
+      for (const series of visualization.series) {
+        if (series.dataKey && !dataColumns.includes(series.dataKey)) {
+          issues.push(`Series data key "${series.dataKey}" does not exist in data`);
+        }
+      }
+    }
+    
+    // Check for category hallucinations
+    if (visualization.data && Array.isArray(visualization.data) && visualization.xAxis) {
+      // Check if visualization data has more categories than actual data
+      const visualizationCategories = new Set<string | number>();
+      visualization.data.forEach((item: { name?: string | number; category?: string | number; value: number }) => {
+        if (item.name) {
+          visualizationCategories.add(item.name);
+        } else if (item.category) {
+          visualizationCategories.add(item.category);
         }
       });
       
-      // Check for categories in visualization that don't exist in data (hallucination)
-      // Convert Set to Array for iteration to avoid downlevelIteration issue
-      Array.from(visualizationCategories).forEach(category => {
-        if (!actualCategories.has(category)) {
-          issues.push(`Visualization category "${category}" does not exist in actual data`);
-        }
-      });
+      if (visualizationCategories.size > 0) {
+        const actualCategories = new Set();
+        data.forEach(row => {
+          if (row[visualization.xAxis] !== undefined && row[visualization.xAxis] !== null) {
+            actualCategories.add(row[visualization.xAxis]);
+          }
+        });
+        
+        // Check for categories in visualization that don't exist in data (hallucination)
+        // Convert Set to Array for iteration to avoid downlevelIteration issue
+        Array.from(visualizationCategories).forEach(category => {
+          if (!actualCategories.has(category)) {
+            issues.push(`Visualization category "${category}" does not exist in actual data`);
+          }
+        });
+      }
     }
+    
+    return {
+      valid: issues.length === 0,
+      issues
+    };
   }
-  
-  return {
-    valid: issues.length === 0,
-    issues
-  };
-}
 
-// Helper function to repair visualization issues
-function repairVisualization(visualization: any, data: any[], issues: string[]): any {
-  // Create a deep copy to avoid modifying the original
-  const repairedViz = JSON.parse(JSON.stringify(visualization));
-  
-  if (!data || data.length === 0) {
-    return repairedViz;
-  }
-  
-  const dataColumns = Object.keys(data[0]);
-  
-  // Fix x-axis issues
-  if (issues.some(issue => issue.includes('X-axis column'))) {
-    // Find numeric columns and categorical columns
-    const numericColumns = dataColumns.filter(col => 
-      data.some(row => typeof row[col] === 'number'));
+  // Helper function to repair visualization issues
+  function repairVisualization(visualization: any, data: any[], issues: string[]): any {
+    // Create a deep copy to avoid modifying the original
+    const repairedViz = JSON.parse(JSON.stringify(visualization));
     
-    const categoricalColumns = dataColumns.filter(col => 
-      !numericColumns.includes(col) && 
-      new Set(data.map(row => row[col])).size <= Math.min(20, data.length * 0.5));
-    
-    // Prefer categorical column for x-axis
-    if (categoricalColumns.length > 0) {
-      repairedViz.xAxis = categoricalColumns[0];
-    } else if (dataColumns.length > 0) {
-      repairedViz.xAxis = dataColumns[0];
+    if (!data || data.length === 0) {
+      return repairedViz;
     }
-  }
-  
-  // Fix y-axis issues
-  if (issues.some(issue => issue.includes('Y-axis column'))) {
-    // Find numeric columns
-    const numericColumns = dataColumns.filter(col => 
-      data.some(row => typeof row[col] === 'number'));
     
-    if (numericColumns.length > 0) {
-      repairedViz.yAxis = numericColumns[0];
-    } else if (dataColumns.length > 1) {
-      repairedViz.yAxis = dataColumns[1];
-    } else if (dataColumns.length > 0) {
-      repairedViz.yAxis = dataColumns[0];
+    const dataColumns = Object.keys(data[0]);
+    
+    // Fix x-axis issues
+    if (issues.some(issue => issue.includes('X-axis column'))) {
+      // Find numeric columns and categorical columns
+      const numericColumns = dataColumns.filter(col => 
+        data.some(row => typeof row[col] === 'number'));
+      
+      const categoricalColumns = dataColumns.filter(col => 
+        !numericColumns.includes(col) && 
+        new Set(data.map(row => row[col])).size <= Math.min(20, data.length * 0.5));
+      
+      // Prefer categorical column for x-axis
+      if (categoricalColumns.length > 0) {
+        repairedViz.xAxis = categoricalColumns[0];
+      } else if (dataColumns.length > 0) {
+        repairedViz.xAxis = dataColumns[0];
+      }
     }
-  }
-  
-  // Fix series data key issues
-  if (issues.some(issue => issue.includes('Series data key'))) {
-    if (repairedViz.series) {
-      for (let i = 0; i < repairedViz.series.length; i++) {
-        if (!dataColumns.includes(repairedViz.series[i].dataKey)) {
-          // Find a suitable numeric column
-          const numericColumns = dataColumns.filter(col => 
-            data.some(row => typeof row[col] === 'number'));
-          
-          if (numericColumns.length > i) {
-            repairedViz.series[i].dataKey = numericColumns[i];
-          } else if (numericColumns.length > 0) {
-            repairedViz.series[i].dataKey = numericColumns[0];
-          } else if (dataColumns.length > 0) {
-            repairedViz.series[i].dataKey = dataColumns[0];
+    
+    // Fix y-axis issues
+    if (issues.some(issue => issue.includes('Y-axis column'))) {
+      // Find numeric columns
+      const numericColumns = dataColumns.filter(col => 
+        data.some(row => typeof row[col] === 'number'));
+      
+      if (numericColumns.length > 0) {
+        repairedViz.yAxis = numericColumns[0];
+      } else if (dataColumns.length > 1) {
+        repairedViz.yAxis = dataColumns[1];
+      } else if (dataColumns.length > 0) {
+        repairedViz.yAxis = dataColumns[0];
+      }
+    }
+    
+    // Fix series data key issues
+    if (issues.some(issue => issue.includes('Series data key'))) {
+      if (repairedViz.series) {
+        for (let i = 0; i < repairedViz.series.length; i++) {
+          if (!dataColumns.includes(repairedViz.series[i].dataKey)) {
+            // Find a suitable numeric column
+            const numericColumns = dataColumns.filter(col => 
+              data.some(row => typeof row[col] === 'number'));
+            
+            if (numericColumns.length > i) {
+              repairedViz.series[i].dataKey = numericColumns[i];
+            } else if (numericColumns.length > 0) {
+              repairedViz.series[i].dataKey = numericColumns[0];
+            } else if (dataColumns.length > 0) {
+              repairedViz.series[i].dataKey = dataColumns[0];
+            }
           }
         }
       }
     }
-  }
-  
-  // Fix category hallucination issues
-  if (issues.some(issue => issue.includes('category'))) {
-    if (repairedViz.data && repairedViz.xAxis) {
-      // Get actual categories from data
-      const actualCategories = new Set();
-      data.forEach(row => {
-        if (row[repairedViz.xAxis] !== undefined) {
-          actualCategories.add(row[repairedViz.xAxis]);
-        }
-      });
-      
-      // Filter out hallucinated categories
-      if (Array.isArray(repairedViz.data)) {
-        repairedViz.data = repairedViz.data.filter((item: any) => 
-          actualCategories.has(item.name || item.category));
-      }
-    }
-  }
-  
-  // Fix issues with plotly JSON data
-  if (issues.some(issue => issue.includes('plotly')) && repairedViz.plotlyJson) {
-    try {
-      // Ensure plotlyJson has proper structure
-      if (!repairedViz.plotlyJson.data) {
-        repairedViz.plotlyJson.data = [];
-      }
-      
-      if (repairedViz.plotlyJson.data.length === 0) {
-        repairedViz.plotlyJson.data.push({
-          type: repairedViz.type || 'bar',
-          x: [],
-          y: []
+    
+    // Fix category hallucination issues
+    if (issues.some(issue => issue.includes('category'))) {
+      if (repairedViz.data && repairedViz.xAxis) {
+        // Get actual categories from data
+        const actualCategories = new Set();
+        data.forEach(row => {
+          if (row[repairedViz.xAxis] !== undefined) {
+            actualCategories.add(row[repairedViz.xAxis]);
+          }
         });
-      }
-      
-      // Make sure data has x and y properties
-      const firstTrace = repairedViz.plotlyJson.data[0];
-      if (!firstTrace.x && Array.isArray(repairedViz.data)) {
-        firstTrace.x = repairedViz.data.map((item: { name?: string | number; category?: string | number; value: number }) => 
-          item.name || item.category);
-      }
-      
-      if (!firstTrace.y && Array.isArray(repairedViz.data)) {
-        firstTrace.y = repairedViz.data.map((item: { name?: string | number; category?: string | number; value: number }) => 
-          item.value);
-      }
-      
-      // Set marker color if missing
-      if (!firstTrace.marker) {
-        firstTrace.marker = { color: '#3B82F6' };
-      }
-      
-      // Ensure layout exists
-      if (!repairedViz.plotlyJson.layout) {
-        repairedViz.plotlyJson.layout = {};
-      }
-      
-      // Add axis titles if missing
-      if (!repairedViz.plotlyJson.layout.xaxis) {
-        repairedViz.plotlyJson.layout.xaxis = { title: repairedViz.xAxis || 'Category' };
-      }
-      
-      if (!repairedViz.plotlyJson.layout.yaxis) {
-        repairedViz.plotlyJson.layout.yaxis = { title: repairedViz.yAxis || 'Value' };
-      }
-      
-      // Add chart title if missing
-      if (!repairedViz.plotlyJson.layout.title) {
-        repairedViz.plotlyJson.layout.title = repairedViz.title || 
-          `${repairedViz.yAxis || 'Value'} by ${repairedViz.xAxis || 'Category'}`;
-      }
-    } catch (error) {
-      console.error('Error repairing plotly JSON:', error);
-      // Create basic plotly data
-      repairedViz.plotlyJson = {
-        data: [{
-          x: [],
-          y: [],
-          type: repairedViz.type || 'bar',
-          marker: { color: '#3B82F6' }
-        }],
-        layout: {
-          title: repairedViz.title || 'Data Visualization',
-          xaxis: { title: repairedViz.xAxis || 'Category' },
-          yaxis: { title: repairedViz.yAxis || 'Value' }
+        
+        // Filter out hallucinated categories
+        if (Array.isArray(repairedViz.data)) {
+          repairedViz.data = repairedViz.data.filter((item: any) => 
+            actualCategories.has(item.name || item.category));
         }
-      };
+      }
     }
-  }
-  
-  // Generate insights if missing
-  if ((!repairedViz.insights || !Array.isArray(repairedViz.insights) || repairedViz.insights.length === 0) && 
-      repairedViz.data && repairedViz.data.length > 0) {
-    try {
-      // Basic insight generation
-      const insights = [];
-      const values = repairedViz.data.map((item: { name?: string | number; category?: string | number; value: number }) => 
-        item.value).filter((val: number) => !isNaN(val));
-      
-      if (values.length > 0) {
-        const sum = values.reduce((a: number, b: number) => a + b, 0);
-        const avg = sum / values.length;
-        const max = Math.max(...values);
-        const min = Math.min(...values);
-        
-        insights.push(`The average ${repairedViz.yAxis || 'value'} is ${avg.toFixed(2)}.`);
-        
-        // Find max and min items
-        const maxItem = repairedViz.data.find((item: { name?: string | number; category?: string | number; value: number }) => 
-          item.value === max);
-        const minItem = repairedViz.data.find((item: { name?: string | number; category?: string | number; value: number }) => 
-          item.value === min);
-        
-        if (maxItem) {
-          insights.push(`${maxItem.name || maxItem.category} has the highest ${repairedViz.yAxis || 'value'} at ${max.toFixed(2)}.`);
+    
+    // Fix issues with plotly JSON data
+    if (issues.some(issue => issue.includes('plotly')) && repairedViz.plotlyJson) {
+      try {
+        // Ensure plotlyJson has proper structure
+        if (!repairedViz.plotlyJson.data) {
+          repairedViz.plotlyJson.data = [];
         }
         
-        if (minItem) {
-          insights.push(`${minItem.name || minItem.category} has the lowest ${repairedViz.yAxis || 'value'} at ${min.toFixed(2)}.`);
+        if (repairedViz.plotlyJson.data.length === 0) {
+          repairedViz.plotlyJson.data.push({
+            type: repairedViz.type || 'bar',
+            x: [],
+            y: []
+          });
         }
         
-        repairedViz.insights = insights;
+        // Make sure data has x and y properties
+        const firstTrace = repairedViz.plotlyJson.data[0];
+        if (!firstTrace.x && Array.isArray(repairedViz.data)) {
+          firstTrace.x = repairedViz.data.map((item: { name?: string | number; category?: string | number; value: number }) => 
+            item.name || item.category);
+        }
+        
+        if (!firstTrace.y && Array.isArray(repairedViz.data)) {
+          firstTrace.y = repairedViz.data.map((item: { name?: string | number; category?: string | number; value: number }) => 
+            item.value);
+        }
+        
+        // Set marker color if missing
+        if (!firstTrace.marker) {
+          firstTrace.marker = { color: '#3B82F6' };
+        }
+        
+        // Ensure layout exists
+        if (!repairedViz.plotlyJson.layout) {
+          repairedViz.plotlyJson.layout = {};
+        }
+        
+        // Add axis titles if missing
+        if (!repairedViz.plotlyJson.layout.xaxis) {
+          repairedViz.plotlyJson.layout.xaxis = { title: repairedViz.xAxis || 'Category' };
+        }
+        
+        if (!repairedViz.plotlyJson.layout.yaxis) {
+          repairedViz.plotlyJson.layout.yaxis = { title: repairedViz.yAxis || 'Value' };
+        }
+        
+        // Add chart title if missing
+        if (!repairedViz.plotlyJson.layout.title) {
+          repairedViz.plotlyJson.layout.title = repairedViz.title || 
+            `${repairedViz.yAxis || 'Value'} by ${repairedViz.xAxis || 'Category'}`;
+        }
+      } catch (error) {
+        console.error('Error repairing plotly JSON:', error);
+        // Create basic plotly data
+        repairedViz.plotlyJson = {
+          data: [{
+            x: [],
+            y: [],
+            type: repairedViz.type || 'bar',
+            marker: { color: '#3B82F6' }
+          }],
+          layout: {
+            title: repairedViz.title || 'Data Visualization',
+            xaxis: { title: repairedViz.xAxis || 'Category' },
+            yaxis: { title: repairedViz.yAxis || 'Value' }
+          }
+        };
       }
-    } catch (error) {
-      console.error('Error generating insights:', error);
-      repairedViz.insights = ['Could not generate insights due to an error in the data.'];
     }
+    
+    // Generate insights if missing
+    if ((!repairedViz.insights || !Array.isArray(repairedViz.insights) || repairedViz.insights.length === 0) && 
+        repairedViz.data && repairedViz.data.length > 0) {
+      try {
+        // Basic insight generation
+        const insights = [];
+        const values = repairedViz.data.map((item: { name?: string | number; category?: string | number; value: number }) => 
+          item.value).filter((val: number) => !isNaN(val));
+        
+        if (values.length > 0) {
+          const sum = values.reduce((a: number, b: number) => a + b, 0);
+          const avg = sum / values.length;
+          const max = Math.max(...values);
+          const min = Math.min(...values);
+          
+          insights.push(`The average ${repairedViz.yAxis || 'value'} is ${avg.toFixed(2)}.`);
+          
+          // Find max and min items
+          const maxItem = repairedViz.data.find((item: { name?: string | number; category?: string | number; value: number }) => 
+            item.value === max);
+          const minItem = repairedViz.data.find((item: { name?: string | number; category?: string | number; value: number }) => 
+            item.value === min);
+          
+          if (maxItem) {
+            insights.push(`${maxItem.name || maxItem.category} has the highest ${repairedViz.yAxis || 'value'} at ${max.toFixed(2)}.`);
+          }
+          
+          if (minItem) {
+            insights.push(`${minItem.name || minItem.category} has the lowest ${repairedViz.yAxis || 'value'} at ${min.toFixed(2)}.`);
+          }
+          
+          repairedViz.insights = insights;
+        }
+      } catch (error) {
+        console.error('Error generating insights:', error);
+        repairedViz.insights = ['Could not generate insights due to an error in the data.'];
+      }
+    }
+    
+    // Make sure there's HTML content for rendering
+    if (!repairedViz.htmlContent) {
+      repairedViz.htmlContent = `<div id="chart" style="width:100%;height:400px;"></div>`;
+    }
+    
+    return repairedViz;
   }
-  
-  // Make sure there's HTML content for rendering
-  if (!repairedViz.htmlContent) {
-    repairedViz.htmlContent = `<div id="chart" style="width:100%;height:400px;"></div>`;
-  }
-  
-  return repairedViz;
-}
   
   // Helper function to parse data (used across multiple endpoints)
   const parseData = (data: any): any[] => {
