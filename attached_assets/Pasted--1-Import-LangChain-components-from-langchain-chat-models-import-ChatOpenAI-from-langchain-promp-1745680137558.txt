@@ -1,0 +1,75 @@
+# 1. Import LangChain components
+from langchain.chat_models import ChatOpenAI
+from langchain.prompts import PromptTemplate
+from langchain.chains import LLMChain
+from langchain.chains.router import MultiPromptChain
+
+# 2. Create your LLM (GPT-4)
+llm = ChatOpenAI(model_name="gpt-4", temperature=0)
+
+# 3. Create a different PromptTemplate for each domain
+food_prompt = PromptTemplate(
+    input_variables=["data"],
+    template="""
+You are a data analyst for FOOD datasets.
+Analyze the following data and generate 5 important insights related to nutrition, calories, caffeine, etc.
+
+Data:
+{data}
+
+Return the insights as bullet points.
+"""
+)
+
+finance_prompt = PromptTemplate(
+    input_variables=["data"],
+    template="""
+You are a financial data analyst.
+Analyze the following stock market dataset and extract 5 key financial insights.
+
+Data:
+{data}
+
+Return the insights as bullet points.
+"""
+)
+
+education_prompt = PromptTemplate(
+    input_variables=["data"],
+    template="""
+You are an educational data analyst.
+Analyze the following student performance dataset and summarize 5 insights related to attendance, scores, and subject performance.
+
+Data:
+{data}
+
+Return the insights as bullet points.
+"""
+)
+
+# 4. Create LLMChains for each domain
+food_chain = LLMChain(llm=llm, prompt=food_prompt)
+finance_chain = LLMChain(llm=llm, prompt=finance_prompt)
+education_chain = LLMChain(llm=llm, prompt=education_prompt)
+
+# 5. Setup a Router
+destination_chains = {
+    "Food": food_chain,
+    "Finance": finance_chain,
+    "Education": education_chain
+}
+
+# 6. Create the Router Chain
+router_chain = MultiPromptChain(
+    llm=llm,
+    destination_chains=destination_chains,
+    default_chain=food_chain,  # fallback if domain not found
+    verbose=True
+)
+
+# 7. How to use it after domain detection
+detected_domain = "Food"  # ← This comes from your domain detector
+sample_data = "Drink, Calories, Caffeine\nLatte, 190, 75\nEspresso, 5, 150"
+
+result = router_chain.run(input=sample_data, destination=detected_domain)
+print(result)

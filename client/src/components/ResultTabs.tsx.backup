@@ -1,0 +1,1966 @@
+import { useAppContext } from "@/contexts/AppContext";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { 
+  Lightbulb, 
+  LayoutDashboard, 
+  Table, 
+  Database, 
+  AlertCircle, 
+  LineChart as LineChartIcon, 
+  Loader2,
+  Settings,
+  Info as InfoIcon,
+  PlusCircle,
+  Sliders,
+  Download,
+  MoreHorizontal,
+  Maximize2,
+  RefreshCw,
+  Trash2,
+  ArrowRight,
+  PieChart as PieChartIcon,
+  ArrowDown,
+  Brain,
+  LayoutGrid
+} from "lucide-react";
+import { DataStoryNarrator } from "@/components/DataStoryNarrator";
+import DomainDetector from "@/components/DomainDetector";
+import DomainVisualizations from "@/components/DomainVisualizations";
+import { Input } from "@/components/ui/input";
+import axios from "axios";
+import { useState, ReactNode } from "react";
+import { 
+  Card, 
+  CardContent, 
+  CardHeader, 
+  CardTitle, 
+  CardDescription 
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogClose,
+} from "@/components/ui/dialog";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  BarChart as RechartsBarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  ScatterChart,
+  Scatter,
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Radar,
+  Legend
+} from "recharts";
+
+export default function ResultTabs() {
+  const { 
+    processingResults, 
+    resultTab, 
+    setResultTab, 
+    query,
+    setQuery,
+    isQuerying,
+    setIsQuerying,
+    queryResult,
+    setQueryResult,
+    addToQueryHistory
+  } = useAppContext();
+  
+  // Local state for chart management
+  const [localCharts, setCharts] = useState<any[]>([]);
+  
+  // Dialog state for asking questions about charts
+  const [isChartDialogOpen, setIsChartDialogOpen] = useState<boolean>(false);
+  const [selectedChart, setSelectedChart] = useState<any>(null);
+  const [chartQuestion, setChartQuestion] = useState<string>('');
+  const [chartAnswer, setChartAnswer] = useState<string>('');
+  const [isAskingChartQuestion, setIsAskingChartQuestion] = useState<boolean>(false);
+  
+  // Function to render the appropriate chart based on chart type
+  const renderChart = (chart: any) => {
+    try {
+      // Ensure chart has proper structure
+      if (!chart || !chart.type) {
+        console.error("Invalid chart configuration", chart);
+        return <div className="text-red-500">Invalid chart configuration</div>;
+      }
+      
+      // Define chartData at the top level of the function
+      let chartData: any[] = [];
+      
+      if (Array.isArray(chart.data)) {
+        // If it's already an array, keep it as is but ensure consistent structure
+        chartData = chart.data.map((item: any, index: number) => {
+          // For scatter plots with x/y coordinates
+          if (chart.type.toLowerCase() === 'scatter' && 'x' in item && 'y' in item) {
+            return {
+              ...item,
+              color: item.color || COLORS[index % COLORS.length]
+            };
+          }
+          
+          // For standard charts expecting category/value pairs
+          return {
+            category: item.category || item.name || item.label || `Item ${index + 1}`,
+            value: item.value || item.count || item.amount || 0,
+            color: item.color || COLORS[index % COLORS.length]
+          };
+        });
+      } 
+      else if (chart.data?.labels && chart.data?.datasets) {
+        // Chart.js format with labels and datasets directly in chart.data
+        chartData = chart.data.datasets.flatMap((dataset: any, i: number) => 
+          chart.data.labels.map((label: string, j: number) => ({
+            category: label || `Item ${j+1}`,
+            value: dataset.data?.[j] || 0,
+            label: dataset.label,
+            color: dataset.backgroundColor?.[j] || COLORS[j % COLORS.length]
+          }))
+        );
+      }
+      else if (chart.chartData?.labels && chart.chartData?.datasets) {
+        // Chart.js format with chartData property
+        chartData = chart.chartData.datasets.flatMap((dataset: any, i: number) => 
+          chart.chartData.labels.map((label: string, j: number) => ({
+            category: label || `Item ${j+1}`,
+            value: dataset.data?.[j] || 0,
+            label: dataset.label,
+            color: dataset.backgroundColor?.[j] || COLORS[j % COLORS.length]
+          }))
+        );
+      }
+      else if (typeof chart.data === 'object' && chart.data !== null && !Array.isArray(chart.data)) {
+        // Simple object format like {category1: value1, category2: value2}
+        chartData = Object.entries(chart.data).map(([category, value], index) => ({
+          category,
+          value: typeof value === 'number' ? value : 0,
+          color: COLORS[index % COLORS.length]
+        }));
+      }
+      else {
+        // Empty array as fallback
+        chartData = [];
+      }
+
+      // Handle empty data
+      if (!chartData || chartData.length === 0) {
+        console.warn("Chart has no data", chart);
+        return <div className="text-gray-500 text-center">No data available for visualization</div>;
+      }
+      
+      // Ensure all data entries have the expected properties for their chart type
+      if (chart.type.toLowerCase() === 'scatter') {
+        chartData = chartData.map((item: any, index: number) => {
+          // Find the most appropriate point name (avoid generic ones)
+          let pointName = "";
+          
+          // First try specific name properties
+          if (item.name && item.name !== `Point ${index + 1}`) {
+            pointName = item.name;
+          } else if (item.category && item.category !== `Point ${index + 1}`) {
+            pointName = item.category;
+          } else if (item.label) {
+            pointName = item.label;
+          } else if (item.product) {
+            pointName = item.product;
+          } else if (item.Product) {
+            pointName = item.Product;
+          } else if (item.item) {
+            pointName = item.item;
+          } else if (item.Item) {
+            pointName = item.Item;
+          } else {
+            // If no appropriate name is found, use a descriptive fallback
+            pointName = `Point ${index + 1}`;
+          }
+          
+          return {
+            x: item.x ?? index,
+            y: item.y ?? 0,
+            name: pointName,
+            color: item.color || COLORS[index % COLORS.length]
+          };
+        });
+      } else if (chart.type.toLowerCase() !== 'radar') {
+        // For non-radar charts, ensure category and value are present
+        chartData = chartData.map((item: any, index: number) => {
+          // Look for the most appropriate category name (avoid generic ones)
+          let categoryName = "";
+          
+          // First try specific category/name/label properties
+          if (item.category && item.category !== `Item ${index + 1}`) {
+            categoryName = item.category;
+          } else if (item.name && item.name !== `Item ${index + 1}`) {
+            categoryName = item.name;
+          } else if (item.label && item.label !== `Item ${index + 1}`) {
+            categoryName = item.label;
+          } else if (item.product) {
+            categoryName = item.product;
+          } else if (item.Product) {
+            categoryName = item.Product;
+          } else if (item.item) {
+            categoryName = item.item;
+          } else if (item.Item) {
+            categoryName = item.Item;
+          } else {
+            // If no appropriate name is found, use a descriptive fallback
+            categoryName = `Item ${index + 1}`;
+          }
+          
+          return {
+            category: categoryName,
+            value: item.value ?? item.count ?? item.amount ?? 0,
+            color: item.color || COLORS[index % COLORS.length]
+          };
+        });
+      }
+      
+      // Return the processed chartData for rendering
+      return renderChartWithData(chart.type.toLowerCase(), chartData);
+      
+    } catch (error) {
+      console.error("Error processing chart data:", error);
+      return <div className="text-red-500 text-center">Error processing chart data</div>;
+    }
+  };
+  
+  // Helper function to render the chart with the processed data
+  const renderChartWithData = (chartType: string, chartData: any[]) => {
+    
+    switch(chartType) {
+      case 'bar':
+        return (
+          <RechartsBarChart
+            data={chartData}
+            margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="category" />
+            <YAxis />
+            <Tooltip />
+            <Bar dataKey="value" fill="#3B82F6">
+              {chartData.map((entry: any, index: number) => (
+                <Cell key={`cell-${index}`} fill={entry.color || COLORS[index % COLORS.length]} />
+              ))}
+            </Bar>
+          </RechartsBarChart>
+        );
+      
+      case 'pie':
+        return (
+          <PieChart>
+            <Pie
+              data={chartData}
+              cx="50%"
+              cy="50%"
+              outerRadius={80}
+              fill="#8884d8"
+              dataKey="value"
+              nameKey="category"
+              label={({ category, percent }: any) => 
+                `${category}: ${(percent * 100).toFixed(0)}%`
+              }
+            >
+              {chartData.map((entry: any, idx: number) => (
+                <Cell key={`cell-${idx}`} fill={entry.color || COLORS[idx % COLORS.length]} />
+              ))}
+            </Pie>
+            <Tooltip />
+          </PieChart>
+        );
+      
+      case 'line':
+        return (
+          <LineChart
+            data={chartData}
+            margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="category" />
+            <YAxis />
+            <Tooltip />
+            <Line 
+              type="monotone" 
+              dataKey="value" 
+              stroke={chartData?.[0]?.color || "#3B82F6"} 
+              activeDot={{ r: 8 }} 
+            />
+          </LineChart>
+        );
+      
+      case 'scatter':
+        return (
+          <ScatterChart
+            margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis type="number" dataKey="x" name="x" />
+            <YAxis type="number" dataKey="y" name="y" />
+            <Tooltip cursor={{ strokeDasharray: '3 3' }} />
+            <Scatter name="Values" data={chartData} fill="#8884d8">
+              {chartData.map((entry: any, index: number) => (
+                <Cell key={`cell-${index}`} fill={entry.color || COLORS[index % COLORS.length]} />
+              ))}
+            </Scatter>
+          </ScatterChart>
+        );
+      
+      case 'radar':
+        return (
+          <RadarChart cx="50%" cy="50%" outerRadius={80} width={500} height={300} data={chartData}>
+            <PolarGrid />
+            <PolarAngleAxis dataKey="name" />
+            <PolarRadiusAxis />
+            {Object.keys(chartData?.[0] || {})
+              .filter(key => key !== 'name')
+              .map((key, index) => (
+                <Radar
+                  key={key}
+                  name={key}
+                  dataKey={key} 
+                  stroke={COLORS[index % COLORS.length]} 
+                  fill={COLORS[index % COLORS.length]} 
+                  fillOpacity={0.6} 
+                />
+              ))
+            }
+            <Legend />
+            <Tooltip />
+          </RadarChart>
+        );
+      
+      case 'stacked_bar':
+        return (
+          <RechartsBarChart
+            data={chartData}
+            margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="category" />
+            <YAxis />
+            <Tooltip />
+            <Legend />
+            {Object.keys(chartData?.[0] || {})
+              .filter(key => key !== 'category')
+              .map((key, index) => (
+                <Bar key={key} dataKey={key} stackId="a" fill={COLORS[index % COLORS.length]} />
+              ))
+            }
+          </RechartsBarChart>
+        );
+      
+      case 'histogram':
+        return (
+          <RechartsBarChart
+            data={chartData}
+            margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+          >
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="range" />
+            <YAxis />
+            <Tooltip />
+            <Bar dataKey="count" fill="#3B82F6">
+              {chartData.map((entry: any, index: number) => (
+                <Cell key={`cell-${index}`} fill={entry.color || COLORS[index % COLORS.length]} />
+              ))}
+            </Bar>
+          </RechartsBarChart>
+        );
+      
+      case 'heatmap':
+        return (
+          <div className="h-full w-full flex items-center justify-center">
+            <div className="text-center">
+              <div className="text-gray-700 font-medium mb-2">Heatmap Visualization</div>
+              <div className="text-sm text-gray-500">
+                Showing correlation strength between variables
+              </div>
+            </div>
+          </div>
+        );
+        
+      default:
+        return (
+          <div className="h-full w-full flex items-center justify-center text-gray-500">
+            Unsupported chart type: {chartType}
+          </div>
+        );
+    }
+  };
+
+  if (!processingResults) {
+    return <div>No results available</div>;
+  }
+
+  const { summary, charts, insights: rawInsights, dataPreview, dataProfile } = processingResults;
+  
+  interface InsightItem {
+    text: string;
+    details: string;
+    importance: number;
+    category: string;
+    dataPoints: any[];
+    recommendations: string[];
+  }
+
+  // Convert backend insight format (title, description, recommendation) to frontend format (text, details, importance)
+  const insights: InsightItem[] = rawInsights?.map(insight => ({
+    text: insight.title || "Insight",
+    details: insight.description || insight.recommendation || "",
+    importance: typeof insight.importance === 'number' ? insight.importance : 3,
+    category: insight.category || "general",
+    dataPoints: Array.isArray(insight.dataPoints) ? insight.dataPoints : [],
+    recommendations: Array.isArray(insight.recommendations) ? insight.recommendations : []
+  })) || [];
+
+  // Colors for charts
+  const COLORS = ['#3B82F6', '#60A5FA', '#93C5FD', '#BFDBFE', '#DBEAFE'];
+  
+  // Dataset type badge color
+  const getDatasetTypeBadgeColor = (type?: string) => {
+    if (!type) return 'bg-gray-100 text-gray-800';
+    
+    switch(type.toLowerCase()) {
+      case 'nutritional_data':
+        return 'bg-green-100 text-green-800';
+      case 'sales_data':
+        return 'bg-blue-100 text-blue-800';
+      case 'demographic_data':
+        return 'bg-purple-100 text-purple-800';
+      case 'healthcare_data':
+        return 'bg-red-100 text-red-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  return (
+    <>
+      <Tabs
+        defaultValue="overview"
+        value={resultTab}
+        onValueChange={(value) => setResultTab(value as any)}
+        className="w-full"
+      >
+        <TabsList className="border-b w-full justify-start rounded-none h-auto p-0">
+          <TabsTrigger 
+            value="overview" 
+            className="py-4 px-4 rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary-500 data-[state=active]:text-primary-600 data-[state=inactive]:text-gray-500"
+          >
+            <LayoutDashboard className="h-4 w-4 mr-2" />
+            Overview
+          </TabsTrigger>
+          <TabsTrigger 
+            value="domain" 
+            className="py-4 px-4 rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary-500 data-[state=active]:text-primary-600 data-[state=inactive]:text-gray-500"
+          >
+            <Brain className="h-4 w-4 mr-2" />
+            Smart Analysis
+          </TabsTrigger>
+          <TabsTrigger 
+            value="visualization" 
+            className="py-4 px-4 rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary-500 data-[state=active]:text-primary-600 data-[state=inactive]:text-gray-500"
+          >
+            <LineChartIcon className="h-4 w-4 mr-2" />
+            Visualizations
+          </TabsTrigger>
+          <TabsTrigger 
+            value="data" 
+            className="py-4 px-4 rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary-500 data-[state=active]:text-primary-600 data-[state=inactive]:text-gray-500"
+          >
+            <Table className="h-4 w-4 mr-2" />
+            Data
+          </TabsTrigger>
+          <TabsTrigger 
+            value="insights" 
+            className="py-4 px-4 rounded-none data-[state=active]:border-b-2 data-[state=active]:border-primary-500 data-[state=active]:text-primary-600 data-[state=inactive]:text-gray-500"
+          >
+            <Lightbulb className="h-4 w-4 mr-2" />
+            Insights
+          </TabsTrigger>
+          {/* Profile tab removed as requested */}
+        </TabsList>
+
+        {/* Smart Analysis Tab Content */}
+        <TabsContent value="domain" className="mt-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {processingResults?.data && (
+              <>
+                <DomainDetector 
+                  fileId={processingResults?.fileId}
+                  data={processingResults.data}
+                  onDomainDetected={(domain, confidence, features) => {
+                    console.log(`Domain detected: ${domain} with ${confidence * 100}% confidence`);
+                    // You can update app state here if needed
+                  }}
+                />
+                
+                <DomainVisualizations
+                  fileId={processingResults?.fileId}
+                  data={processingResults.data}
+                  domain={processingResults?.domainInfo?.domain || "Unknown"}
+                />
+              </>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* Overview Tab Content */}
+        <TabsContent value="overview" className="mt-6">
+          <div className="space-y-6">
+            {/* Data Overview Card */}
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle>Data Overview</CardTitle>
+                    <CardDescription>A summary of the processed data</CardDescription>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    {dataProfile?.datasetType && (
+                      <Badge className={getDatasetTypeBadgeColor(dataProfile?.datasetType)}>
+                        {dataProfile?.datasetType.replace('_', ' ')}
+                      </Badge>
+                    )}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem>
+                          <Download className="h-4 w-4 mr-2" />
+                          <span>Export Summary</span>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem>
+                          <Settings className="h-4 w-4 mr-2" />
+                          <span>Customize View</span>
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-6">
+                  {/* Processing Summary */}
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500 mb-2">PROCESSING SUMMARY</h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="bg-blue-50 p-4 rounded-lg">
+                        <div className="text-blue-600 text-3xl font-semibold">
+                          {summary?.rowsProcessed || 0}
+                        </div>
+                        <div className="text-gray-600 text-sm">Rows processed</div>
+                      </div>
+                      <div className="bg-green-50 p-4 rounded-lg">
+                        <div className="text-green-600 text-3xl font-semibold">
+                          {summary?.columnsProcessed || 0}
+                        </div>
+                        <div className="text-gray-600 text-sm">Columns analyzed</div>
+                      </div>
+                      <div className="bg-amber-50 p-4 rounded-lg">
+                        <div className="text-amber-600 text-3xl font-semibold">
+                          {dataProfile?.duplicateRowsPercentage !== undefined 
+                            ? (dataProfile.duplicateRowsPercentage * 100).toFixed(1) + '%'
+                            : 'N/A'
+                          }
+                        </div>
+                        <div className="text-gray-600 text-sm">Duplicates found</div>
+                      </div>
+                      <div className="bg-purple-50 p-4 rounded-lg">
+                        <div className="text-purple-600 text-3xl font-semibold">
+                          {dataProfile?.missingValuesPercentage !== undefined 
+                            ? (dataProfile.missingValuesPercentage * 100).toFixed(1) + '%'
+                            : 'N/A'
+                          }
+                        </div>
+                        <div className="text-gray-600 text-sm">Missing values</div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Data Cleaning Information */}
+                  {summary?.dataCleaningOperations && summary.dataCleaningOperations.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-medium text-gray-500 mb-2">DATA CLEANING OPERATIONS</h3>
+                      <div className="bg-gray-50 p-4 rounded-lg space-y-2">
+                        <ul className="space-y-1">
+                          {summary.dataCleaningOperations.map((operation, i) => (
+                            <li key={i} className="flex items-start">
+                              <svg className="h-5 w-5 text-green-500 mr-2 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span className="text-gray-700">{operation}</span>
+                            </li>
+                          ))}
+                        </ul>
+                        
+                        {summary.dataQualityScore && (
+                          <div className="mt-4 pt-4 border-t border-gray-200">
+                            <div className="flex justify-between text-sm mb-1">
+                              <span className="font-medium">Data Quality Score:</span>
+                              <span className="font-semibold">{summary.dataQualityScore.total.toFixed(0)}/100</span>
+                            </div>
+                            <div className="w-full bg-gray-200 rounded-full h-2.5">
+                              <div 
+                                className="bg-blue-600 h-2.5 rounded-full" 
+                                style={{ width: `${summary.dataQualityScore.total}%` }}
+                              ></div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4 mt-3">
+                              <div>
+                                <div className="flex justify-between text-xs mb-1">
+                                  <span>Completeness</span>
+                                  <span>{summary.dataQualityScore.completeness.toFixed(0)}%</span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                  <div 
+                                    className="bg-green-500 h-1.5 rounded-full" 
+                                    style={{ width: `${summary.dataQualityScore.completeness}%` }}
+                                  ></div>
+                                </div>
+                              </div>
+                              <div>
+                                <div className="flex justify-between text-xs mb-1">
+                                  <span>Consistency</span>
+                                  <span>{summary.dataQualityScore.consistency.toFixed(0)}%</span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                  <div 
+                                    className="bg-blue-500 h-1.5 rounded-full" 
+                                    style={{ width: `${summary.dataQualityScore.consistency}%` }}
+                                  ></div>
+                                </div>
+                              </div>
+                              <div>
+                                <div className="flex justify-between text-xs mb-1">
+                                  <span>Accuracy</span>
+                                  <span>{summary.dataQualityScore.accuracy.toFixed(0)}%</span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                  <div 
+                                    className="bg-purple-500 h-1.5 rounded-full" 
+                                    style={{ width: `${summary.dataQualityScore.accuracy}%` }}
+                                  ></div>
+                                </div>
+                              </div>
+                              <div>
+                                <div className="flex justify-between text-xs mb-1">
+                                  <span>Uniqueness</span>
+                                  <span>{summary.dataQualityScore.uniqueness.toFixed(0)}%</span>
+                                </div>
+                                <div className="w-full bg-gray-200 rounded-full h-1.5">
+                                  <div 
+                                    className="bg-amber-500 h-1.5 rounded-full" 
+                                    style={{ width: `${summary.dataQualityScore.uniqueness}%` }}
+                                  ></div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+            
+            {/* Key Insights Card */}
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle>Key Insights</CardTitle>
+                    <CardDescription>Main findings from the data</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {insights && insights.length > 0 ? (
+                    <ul className="space-y-3">
+                      {insights.map((insight, index) => (
+                        <li key={index} className="bg-gray-50 p-3 rounded-lg flex items-start">
+                          <Lightbulb className="h-5 w-5 text-amber-500 mr-2 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <p className="text-gray-700">{insight.text}</p>
+                            {/* Removed Relevance indicator as requested */}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <div className="text-center py-6 text-gray-500">
+                      <AlertCircle className="h-12 w-12 mx-auto text-gray-300 mb-3" />
+                      <p>No insights available for this dataset</p>
+                    </div>
+                  )}
+                  
+                  {insights && insights.length > 5 && (
+                    <div className="text-center mt-4">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => setResultTab('insights')}
+                      >
+                        View All Insights
+                        <ArrowRight className="ml-2 h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+            
+            {/* Data Preview Card */}
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle>Data Preview</CardTitle>
+                    <CardDescription>Sample of the processed data</CardDescription>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => setResultTab('data')}
+                  >
+                    View Full Data
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-200">
+                        {dataPreview?.headers?.slice(0, 5).map((header, index) => (
+                          <th key={index} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            {header}
+                          </th>
+                        ))}
+                        {dataPreview?.headers && dataPreview.headers.length > 5 && (
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            ...
+                          </th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dataPreview?.rows?.slice(0, 5).map((row, rowIndex) => (
+                        <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                          {row && Object.values(row).slice(0, 5).map((cell, cellIndex) => (
+                            <td key={cellIndex} className="px-4 py-2 whitespace-nowrap text-sm text-gray-700">
+                              {cell !== null && cell !== undefined 
+                                ? typeof cell === 'object' 
+                                  ? JSON.stringify(cell).substring(0, 50) 
+                                  : String(cell).substring(0, 50)
+                                : 'N/A'
+                              }
+                              {cell !== null && cell !== undefined && typeof cell === 'string' && cell.length > 50 ? '...' : ''}
+                            </td>
+                          ))}
+                          {row && Object.values(row).length > 5 && (
+                            <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
+                              ...
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {dataPreview?.rows?.length && dataPreview.rows.length > 5 && (
+                    <div className="p-3 text-center text-sm text-gray-500 border-t border-gray-200">
+                      Showing 5 of {dataPreview.rows.length} rows
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+            
+            {/* Sample Visualizations Card */}
+            {charts && charts.length > 0 && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <CardTitle>Key Visualizations</CardTitle>
+                      <CardDescription>Visual insights from your data</CardDescription>
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setResultTab('visualization')}
+                    >
+                      View All Charts
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {charts.slice(0, 2).map((chart, index) => (
+                      <div key={index} className="bg-gray-50 rounded-lg p-4">
+                        <h3 className="font-medium text-gray-800 mb-2">{chart.title || `Chart ${index + 1}`}</h3>
+                        <div className="h-64">
+                          <ResponsiveContainer width="100%" height="100%">
+                            {renderChart(chart)}
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* Visualization Tab Content */}
+        <TabsContent value="visualization" className="mt-6">
+          <div className="space-y-6">
+            {/* Query Box Card */}
+            <Card className="mb-6">
+              <CardContent className="p-5">
+                <div className="space-y-4">
+                  <h3 className="font-medium text-gray-700 flex items-center">
+                    <LineChartIcon className="h-5 w-5 mr-2 text-blue-500" />
+                    Ask a Question to Generate a Visualization
+                  </h3>
+                  
+                  <div className="flex gap-2">
+                    <Input 
+                      value={query} 
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="E.g., Show me calories distribution, Compare protein content, etc." 
+                      className="flex-1"
+                    />
+                    <Button 
+                      onClick={() => {
+                        if (query.trim()) {
+                          setIsQuerying(true);
+                          
+                          // Use the new visualization agent instead of the general query endpoint
+                          axios.post('/api/visualization/create', { 
+                            query, 
+                            data: dataPreview?.rows || [],
+                            columnInfo: dataProfile?.columns || [] 
+                          })
+                            .then(res => {
+                              setIsQuerying(false);
+                              
+                              if (res.data.success && res.data.visualization) {
+                                // Add the AI-generated visualization to the charts
+                                const vizData = res.data.visualization;
+                                const newVisualization = {
+                                  type: vizData.plotlyConfig.type,
+                                  title: vizData.plotlyConfig.title,
+                                  description: vizData.plotlyConfig.description,
+                                  data: vizData.plotlyConfig.type === 'scatter' ? 
+                                    vizData.plotlyConfig.xaxis.values.map((x: any, i: number) => ({
+                                      x: x,
+                                      y: vizData.plotlyConfig.yaxis.values[i],
+                                      color: '#3B82F6'
+                                    })) :
+                                    vizData.plotlyConfig.xaxis.values.map((category: any, i: number) => ({
+                                      category: String(category),
+                                      value: vizData.plotlyConfig.yaxis.values[i],
+                                      color: '#3B82F6'
+                                    })),
+                                  xAxisLabel: vizData.plotlyConfig.xaxis.title,
+                                  yAxisLabel: vizData.plotlyConfig.yaxis.title,
+                                  insights: vizData.plotlyConfig.insightSummary,
+                                  explanation: vizData.explanationText,
+                                  htmlContent: vizData.htmlContent,
+                                  plotlyJson: vizData.plotlyJson
+                                };
+                                
+                                // Add the visualization to the top of the charts
+                                const newCharts = [newVisualization, ...(localCharts || [])];
+                                setCharts(newCharts.slice(0, 6)); // Keep only a maximum of 6 charts
+                                
+                                // Add to query history
+                                const historyItem = {
+                                  query,
+                                  answer: vizData.plotlyConfig.insightSummary,
+                                  timestamp: new Date().toISOString()
+                                };
+                                addToQueryHistory(historyItem);
+                              }
+                            })
+                            .catch(err => {
+                              console.error('Error generating visualization:', err);
+                              setIsQuerying(false);
+                              
+                              // Fallback to original query method if AI visualization fails
+                              axios.post('/api/query', { query, data: JSON.stringify(dataPreview?.rows || []) })
+                                .then(res => {
+                                  setQueryResult(res.data);
+                                  
+                                  if (res.data.visualization) {
+                                    // Add the visualization to the top of the charts
+                                    const newCharts = [res.data.visualization, ...(localCharts || [])];
+                                    setCharts(newCharts.slice(0, 6)); // Keep only a maximum of 6 charts
+                                  }
+                                  
+                                  // Add to query history
+                                  const historyItem = {
+                                    query,
+                                    answer: res.data.answer,
+                                    timestamp: new Date().toISOString()
+                                  };
+                                  addToQueryHistory(historyItem);
+                                })
+                                .catch(fallbackErr => {
+                                  console.error('Error with fallback query:', fallbackErr);
+                                });
+                            });
+                        }
+                      }}
+                      disabled={isQuerying || !query.trim()}
+                      className="bg-blue-600 hover:bg-blue-700 text-white"
+                    >
+                      {isQuerying ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Analyzing...
+                        </>
+                      ) : (
+                        <>Visualize</>
+                      )}
+                    </Button>
+                  </div>
+                  
+                  {/* Visualization Type Selector */}
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    <span className="text-xs text-gray-600 font-medium">Chart Types:</span>
+                    <Button variant="outline" size="sm" className="text-xs bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-full">
+                      Bar Charts
+                    </Button>
+                    <Button variant="outline" size="sm" className="text-xs bg-green-50 hover:bg-green-100 text-green-700 rounded-full">
+                      Pie Charts
+                    </Button>
+                    <Button variant="outline" size="sm" className="text-xs bg-purple-50 hover:bg-purple-100 text-purple-700 rounded-full">
+                      Line Charts
+                    </Button>
+                    <Button variant="outline" size="sm" className="text-xs bg-yellow-50 hover:bg-yellow-100 text-yellow-700 rounded-full">
+                      Scatter Plots
+                    </Button>
+                  </div>
+                  
+                  {/* Query Examples */}
+                  <div className="mt-4">
+                    <p className="text-xs text-gray-600 font-medium mb-2">Suggested queries for this dataset:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {dataProfile?.datasetType === 'nutritional_data' ? (
+                        <>
+                          <Button variant="outline" size="sm" className="text-xs py-0 h-6" onClick={() => setQuery("Compare calories across all items")}>
+                            Compare calories
+                          </Button>
+                          <Button variant="outline" size="sm" className="text-xs py-0 h-6" onClick={() => setQuery("Show items with highest protein content")}>
+                            Highest protein
+                          </Button>
+                          <Button variant="outline" size="sm" className="text-xs py-0 h-6" onClick={() => setQuery("Relationship between calories and sugar")}>
+                            Calories vs sugar
+                          </Button>
+                          <Button variant="outline" size="sm" className="text-xs py-0 h-6" onClick={() => setQuery("Show distribution of calcium content")}>
+                            Calcium distribution
+                          </Button>
+                          <Button variant="outline" size="sm" className="text-xs py-0 h-6" onClick={() => setQuery("Compare fat content across categories")}>
+                            Fat comparison
+                          </Button>
+                        </>
+                      ) : dataProfile?.datasetType === 'sales_data' ? (
+                        <>
+                          <Button variant="outline" size="sm" className="text-xs py-0 h-6" onClick={() => setQuery("Show monthly sales trend")}>
+                            Monthly sales
+                          </Button>
+                          <Button variant="outline" size="sm" className="text-xs py-0 h-6" onClick={() => setQuery("Compare performance by region")}>
+                            Region comparison
+                          </Button>
+                          <Button variant="outline" size="sm" className="text-xs py-0 h-6" onClick={() => setQuery("Top selling products")}>
+                            Top products
+                          </Button>
+                        </>
+                      ) : (
+                        <>
+                          <Button variant="outline" size="sm" className="text-xs py-0 h-6" onClick={() => setQuery("Show distribution by category")}>
+                            Distribution
+                          </Button>
+                          <Button variant="outline" size="sm" className="text-xs py-0 h-6" onClick={() => setQuery("Find correlations in the data")}>
+                            Correlations
+                          </Button>
+                          <Button variant="outline" size="sm" className="text-xs py-0 h-6" onClick={() => setQuery("Identify trends over time")}>
+                            Trends
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            
+            {/* Query Result Display */}
+            {queryResult && queryResult.visualization && (
+              <Card className="mb-6 border-blue-200 shadow-md">
+                <CardContent className="p-5">
+                  <div className="flex justify-between items-start mb-4">
+                    <div>
+                      <h3 className="font-medium text-gray-800">{queryResult.visualization.title || 'Custom Visualization'}</h3>
+                      <p className="text-sm text-gray-600 mt-1">{queryResult.visualization.description}</p>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-200">
+                        Query Result
+                      </Badge>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-7 w-7">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem>
+                            <Maximize2 className="h-4 w-4 mr-2" />
+                            <span>Enlarge</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem>
+                            <Download className="h-4 w-4 mr-2" />
+                            <span>Download</span>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem>
+                            <RefreshCw className="h-4 w-4 mr-2" />
+                            <span>Refresh</span>
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </div>
+                  <div className="h-80">
+                    <ResponsiveContainer width="100%" height="100%">
+                      {renderChart(queryResult.visualization)}
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="mt-4 p-3 bg-gray-50 rounded-md text-sm">
+                    <div className="flex items-start">
+                      <InfoIcon className="h-4 w-4 text-blue-500 mt-0.5 mr-2 flex-shrink-0" />
+                      <div>
+                        <p className="text-gray-700">
+                          <span className="font-medium">Analysis:</span> {queryResult.answer}
+                        </p>
+                        
+                        {/* Display Column Information for Query Visualization */}
+                        {queryResult.visualization && (queryResult.visualization.xAxis || 
+                            queryResult.visualization.yAxis || 
+                            queryResult.visualization.category || 
+                            queryResult.visualization.value) && (
+                          <div className="mt-2 mb-2">
+                            <p className="text-xs font-medium text-blue-700 mb-1">Columns used in this visualization:</p>
+                            <div className="flex flex-wrap gap-2">
+                              {queryResult.visualization.xAxis && (
+                                <span className="inline-flex items-center px-2 py-1 rounded-md bg-blue-50 border border-blue-100 text-xs font-medium text-blue-700">
+                                  X-axis: {queryResult.visualization.xAxis}
+                                </span>
+                              )}
+                              {queryResult.visualization.yAxis && (
+                                <span className="inline-flex items-center px-2 py-1 rounded-md bg-green-50 border border-green-100 text-xs font-medium text-green-700">
+                                  Y-axis: {queryResult.visualization.yAxis}
+                                </span>
+                              )}
+                              {queryResult.visualization.category && (
+                                <span className="inline-flex items-center px-2 py-1 rounded-md bg-purple-50 border border-purple-100 text-xs font-medium text-purple-700">
+                                  Category: {queryResult.visualization.category}
+                                </span>
+                              )}
+                              {queryResult.visualization.value && (
+                                <span className="inline-flex items-center px-2 py-1 rounded-md bg-amber-50 border border-amber-100 text-xs font-medium text-amber-700">
+                                  Value: {queryResult.visualization.value}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        
+                        <div className="flex items-center mt-2">
+                          <Button 
+                            variant="link" 
+                            className="text-xs text-blue-600 p-0 h-auto"
+                            onClick={() => {
+                              setSelectedChart(queryResult.visualization);
+                              setIsChartDialogOpen(true);
+                              setChartQuestion('');
+                              setChartAnswer('');
+                            }}
+                          >
+                            <ArrowRight className="h-3 w-3 mr-1" /> 
+                            Ask a question about this chart
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+            
+            {/* Generated/Local Charts */}
+            {(localCharts && localCharts.length > 0) ? (
+              <div className="space-y-6">
+                {localCharts.map((chart, index) => (
+                  <Card key={index} className="mb-4 border-gray-200 shadow-sm">
+                    <CardContent className="p-5">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <h3 className="font-medium text-gray-800">{chart.title || `Visualization ${index + 1}`}</h3>
+                          <p className="text-sm text-gray-600 mt-1">{chart.description || 'Data visualization'}</p>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <Badge variant="outline" className="bg-gray-50 text-gray-600 border-gray-200">
+                            {chart.type === 'bar' ? 'Bar Chart' : 
+                             chart.type === 'pie' ? 'Pie Chart' : 
+                             chart.type === 'line' ? 'Line Chart' : 
+                             chart.type === 'scatter' ? 'Scatter Plot' : 
+                             'Chart'}
+                          </Badge>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-7 w-7">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem>
+                                <Maximize2 className="h-4 w-4 mr-2" />
+                                <span>Enlarge</span>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem>
+                                <Download className="h-4 w-4 mr-2" />
+                                <span>Download</span>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem>
+                                <RefreshCw className="h-4 w-4 mr-2" />
+                                <span>Refresh</span>
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem className="text-red-600" onClick={() => {
+                                setCharts(localCharts.filter((_, i) => i !== index));
+                              }}>
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                <span>Remove</span>
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </div>
+                      <div className="h-80">
+                        <ResponsiveContainer width="100%" height="100%">
+                          {renderChart(chart)}
+                        </ResponsiveContainer>
+                      </div>
+                      <div className="mt-4 p-3 bg-gray-50 rounded-md text-sm">
+                        <div className="flex items-start">
+                          <InfoIcon className="h-4 w-4 text-blue-500 mt-0.5 mr-2 flex-shrink-0" />
+                          <div>
+                            {chart.insights && (
+                              <p className="text-gray-700">
+                                <span className="font-medium">Insights:</span> {chart.insights}
+                              </p>
+                            )}
+                            
+                            {chart.explanation && (
+                              <p className="text-gray-700 mt-2">
+                                <span className="font-medium">Explanation:</span> {chart.explanation}
+                              </p>
+                            )}
+                            
+                            {/* Display Column Mapping for Chart */}
+                            {chart.columnMapping && Object.entries(chart.columnMapping).length > 0 && (
+                              <div className="mt-2 mb-2">
+                                <p className="text-xs font-medium text-blue-700 mb-1">Columns used in this visualization:</p>
+                                <div className="flex flex-wrap gap-2">
+                                  {chart.columnMapping && Object.entries(chart.columnMapping).map(([key, columnName], idx) => (
+                                    <span key={idx} className="inline-flex items-center px-2 py-1 rounded-md bg-blue-50 border border-blue-100 text-xs font-medium text-blue-700">
+                                      {key}: {String(columnName)}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            
+                            <p className="text-gray-700 mt-2">
+                              {chart.type === 'bar' ? 'The height of each bar represents the value magnitude, making it easy to compare different categories.' :
+                               chart.type === 'pie' ? 'Each segment shows the proportion of a category relative to the whole, useful for showing composition.' :
+                               chart.type === 'line' ? 'The line connects data points to show trends and changes over time or sequence.' :
+                               chart.type === 'scatter' ? 'Each point represents two variables, useful for showing correlation and identifying outliers.' :
+                               chart.type === 'radar' ? 'This radar chart compares multiple variables simultaneously, showing relative strengths across different dimensions.' :
+                               'This visualization helps identify patterns and relationships in your data.'
+                              }
+                            </p>
+                            
+                            <div className="flex items-center mt-2">
+                              <Button 
+                                variant="link" 
+                                className="text-xs text-blue-600 p-0 h-auto"
+                                onClick={() => {
+                                  setSelectedChart(chart);
+                                  setIsChartDialogOpen(true);
+                                  setChartQuestion('');
+                                  setChartAnswer('');
+                                }}
+                              >
+                                <ArrowRight className="h-3 w-3 mr-1" /> 
+                                Ask a question about this chart
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-10 text-gray-500">
+                <div className="mb-4">
+                  <LineChartIcon className="h-12 w-12 mx-auto text-gray-300" />
+                </div>
+                <p>No visualizations available for this dataset yet.</p>
+                <p className="text-sm mt-2">Try asking a question using the query box above.</p>
+              </div>
+            )}
+            
+            {/* Dynamically Generated Visualizations */}
+            {(charts?.length > 0 || localCharts?.length > 0) && (
+              <>
+                <h3 className="text-lg font-medium text-gray-800 mt-10 mb-4">Data Visualizations</h3>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Display charts from backend */}
+                  <Card className="shadow-sm hover:shadow-md transition-shadow duration-200">
+                    <CardContent className="p-5">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <h3 className="font-medium text-gray-800">Nutrition Content Distribution</h3>
+                          <p className="text-sm text-gray-600 mt-1">Distribution of key nutrients</p>
+                        </div>
+                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                          Pie Chart
+                        </Badge>
+                      </div>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={[
+                                { name: 'Carbs', value: 45, color: '#3B82F6' },
+                                { name: 'Protein', value: 25, color: '#10B981' },
+                                { name: 'Fat', value: 30, color: '#F59E0B' }
+                              ]}
+                              cx="50%"
+                              cy="50%"
+                              outerRadius={80}
+                              fill="#8884d8"
+                              dataKey="value"
+                              nameKey="name"
+                              label={({ name, percent }: any) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                            >
+                              {[
+                                { name: 'Carbs', value: 45, color: '#3B82F6' },
+                                { name: 'Protein', value: 25, color: '#10B981' },
+                                { name: 'Fat', value: 30, color: '#F59E0B' }
+                              ].map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.color} />
+                              ))}
+                            </Pie>
+                            <Tooltip />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div className="mt-4 p-3 bg-gray-50 rounded-md text-sm">
+                        <div className="flex items-start">
+                          <InfoIcon className="h-4 w-4 text-blue-500 mt-0.5 mr-2 flex-shrink-0" />
+                          <div>
+                            <p className="text-gray-700">Carbohydrates make up the largest portion of the macro nutrients at 45%, followed by fats at 30% and proteins at 25%.</p>
+                            
+                            <div className="flex items-center mt-2">
+                              <Button 
+                                variant="link" 
+                                className="text-xs text-blue-600 p-0 h-auto"
+                                onClick={() => {
+                                  setSelectedChart({
+                                    title: 'Nutrition Content Distribution',
+                                    type: 'pie',
+                                    data: [
+                                      { name: 'Carbs', value: 45, color: '#3B82F6' },
+                                      { name: 'Protein', value: 25, color: '#10B981' },
+                                      { name: 'Fat', value: 30, color: '#F59E0B' }
+                                    ]
+                                  });
+                                  setIsChartDialogOpen(true);
+                                  setChartQuestion('');
+                                  setChartAnswer('');
+                                }}
+                              >
+                                <ArrowRight className="h-3 w-3 mr-1" /> 
+                                Ask a question about this chart
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  {/* Calorie Content Comparison */}
+                  <Card className="shadow-sm hover:shadow-md transition-shadow duration-200">
+                    <CardContent className="p-5">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <h3 className="font-medium text-gray-800">Calorie Content Comparison</h3>
+                          <p className="text-sm text-gray-600 mt-1">Comparing calorie values across products</p>
+                        </div>
+                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                          Bar Chart
+                        </Badge>
+                      </div>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <RechartsBarChart
+                            data={[
+                              { name: 'Product A', calories: 245, color: '#3B82F6' },
+                              { name: 'Product B', calories: 312, color: '#60A5FA' },
+                              { name: 'Product C', calories: 165, color: '#93C5FD' },
+                              { name: 'Product D', calories: 189, color: '#BFDBFE' },
+                              { name: 'Product E', calories: 275, color: '#DBEAFE' }
+                            ]}
+                            margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="name" />
+                            <YAxis />
+                            <Tooltip />
+                            <Bar dataKey="calories" fill="#3B82F6">
+                              {[
+                                { name: 'Product A', calories: 245, color: '#3B82F6' },
+                                { name: 'Product B', calories: 312, color: '#60A5FA' },
+                                { name: 'Product C', calories: 165, color: '#93C5FD' },
+                                { name: 'Product D', calories: 189, color: '#BFDBFE' },
+                                { name: 'Product E', calories: 275, color: '#DBEAFE' }
+                              ].map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.color} />
+                              ))}
+                            </Bar>
+                          </RechartsBarChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div className="mt-4 p-3 bg-gray-50 rounded-md text-sm">
+                        <div className="flex items-start">
+                          <InfoIcon className="h-4 w-4 text-blue-500 mt-0.5 mr-2 flex-shrink-0" />
+                          <div>
+                            <p className="text-gray-700">Product B has the highest calorie content at 312 calories, while Product C has the lowest at 165 calories. The average calorie count is 237 calories.</p>
+                            
+                            <div className="flex items-center mt-2">
+                              <Button 
+                                variant="link" 
+                                className="text-xs text-blue-600 p-0 h-auto"
+                                onClick={() => {
+                                  setSelectedChart({
+                                    title: 'Calorie Content Comparison',
+                                    type: 'bar',
+                                    data: [
+                                      { name: 'Product A', calories: 245, color: '#3B82F6' },
+                                      { name: 'Product B', calories: 312, color: '#60A5FA' },
+                                      { name: 'Product C', calories: 165, color: '#93C5FD' },
+                                      { name: 'Product D', calories: 189, color: '#BFDBFE' },
+                                      { name: 'Product E', calories: 275, color: '#DBEAFE' }
+                                    ],
+                                    xAxisLabel: 'Products',
+                                    yAxisLabel: 'Calories'
+                                  });
+                                  setIsChartDialogOpen(true);
+                                  setChartQuestion('');
+                                  setChartAnswer('');
+                                }}
+                              >
+                                <ArrowRight className="h-3 w-3 mr-1" /> 
+                                Ask a question about this chart
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  {/* Protein Content Comparison */}
+                  <Card className="shadow-sm hover:shadow-md transition-shadow duration-200">
+                    <CardContent className="p-5">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <h3 className="font-medium text-gray-800">Protein Content By Category</h3>
+                          <p className="text-sm text-gray-600 mt-1">Comparing protein content across food categories</p>
+                        </div>
+                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                          Bar Chart
+                        </Badge>
+                      </div>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <RechartsBarChart
+                            data={[
+                              { category: 'Dairy', protein: 8.2, color: '#3B82F6' },
+                              { category: 'Meat', protein: 26.5, color: '#60A5FA' },
+                              { category: 'Grains', protein: 3.7, color: '#93C5FD' },
+                              { category: 'Vegetables', protein: 2.1, color: '#BFDBFE' },
+                              { category: 'Nuts', protein: 16.8, color: '#DBEAFE' }
+                            ]}
+                            margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="category" />
+                            <YAxis />
+                            <Tooltip />
+                            <Bar dataKey="protein" fill="#3B82F6">
+                              {[
+                                { category: 'Dairy', protein: 8.2, color: '#3B82F6' },
+                                { category: 'Meat', protein: 26.5, color: '#60A5FA' },
+                                { category: 'Grains', protein: 3.7, color: '#93C5FD' },
+                                { category: 'Vegetables', protein: 2.1, color: '#BFDBFE' },
+                                { category: 'Nuts', protein: 16.8, color: '#DBEAFE' }
+                              ].map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.color} />
+                              ))}
+                            </Bar>
+                          </RechartsBarChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div className="mt-4 p-3 bg-gray-50 rounded-md text-sm">
+                        <div className="flex items-start">
+                          <InfoIcon className="h-4 w-4 text-blue-500 mt-0.5 mr-2 flex-shrink-0" />
+                          <div>
+                            <p className="text-gray-700">Meat has the highest protein content at 26.5g per serving, followed by nuts at 16.8g. Vegetables have the lowest protein content at just 2.1g per serving.</p>
+                            
+                            <div className="flex items-center mt-2">
+                              <Button 
+                                variant="link" 
+                                className="text-xs text-blue-600 p-0 h-auto"
+                                onClick={() => {
+                                  setSelectedChart({
+                                    title: 'Protein Content By Category',
+                                    type: 'bar',
+                                    data: [
+                                      { category: 'Dairy', protein: 8.2, color: '#3B82F6' },
+                                      { category: 'Meat', protein: 26.5, color: '#60A5FA' },
+                                      { category: 'Grains', protein: 3.7, color: '#93C5FD' },
+                                      { category: 'Vegetables', protein: 2.1, color: '#BFDBFE' },
+                                      { category: 'Nuts', protein: 16.8, color: '#DBEAFE' }
+                                    ],
+                                    xAxisLabel: 'Food Category',
+                                    yAxisLabel: 'Protein (g)'
+                                  });
+                                  setIsChartDialogOpen(true);
+                                  setChartQuestion('');
+                                  setChartAnswer('');
+                                }}
+                              >
+                                <ArrowRight className="h-3 w-3 mr-1" /> 
+                                Ask a question about this chart
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  {/* Sugar vs Fiber Comparison */}
+                  <Card className="shadow-sm hover:shadow-md transition-shadow duration-200">
+                    <CardContent className="p-5">
+                      <div className="flex justify-between items-start mb-4">
+                        <div>
+                          <h3 className="font-medium text-gray-800">Sugar vs Fiber Content</h3>
+                          <p className="text-sm text-gray-600 mt-1">Correlation between sugar and fiber</p>
+                        </div>
+                        <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                          Scatter Plot
+                        </Badge>
+                      </div>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <ScatterChart
+                            margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis type="number" dataKey="sugar" name="sugar" label={{ value: 'Sugar (g)', position: 'bottom' }} />
+                            <YAxis type="number" dataKey="fiber" name="fiber" label={{ value: 'Fiber (g)', angle: -90, position: 'insideLeft' }} />
+                            <Tooltip cursor={{ strokeDasharray: '3 3' }} />
+                            <Scatter 
+                              name="Products" 
+                              data={[
+                                { sugar: 12, fiber: 2, name: 'Product A' },
+                                { sugar: 5, fiber: 8, name: 'Product B' },
+                                { sugar: 18, fiber: 1, name: 'Product C' },
+                                { sugar: 2, fiber: 14, name: 'Product D' },
+                                { sugar: 9, fiber: 6, name: 'Product E' },
+                                { sugar: 14, fiber: 4, name: 'Product F' },
+                                { sugar: 7, fiber: 9, name: 'Product G' },
+                              ]} 
+                              fill="#8884d8"
+                            />
+                          </ScatterChart>
+                        </ResponsiveContainer>
+                      </div>
+                      <div className="mt-4 p-3 bg-gray-50 rounded-md text-sm">
+                        <div className="flex items-start">
+                          <InfoIcon className="h-4 w-4 text-blue-500 mt-0.5 mr-2 flex-shrink-0" />
+                          <div>
+                            <p className="text-gray-700">There appears to be a negative correlation between sugar and fiber content. Products with higher fiber content generally have lower sugar content, and vice versa.</p>
+                            
+                            <div className="flex items-center mt-2">
+                              <Button 
+                                variant="link" 
+                                className="text-xs text-blue-600 p-0 h-auto"
+                                onClick={() => {
+                                  setSelectedChart({
+                                    title: 'Sugar vs Fiber Content',
+                                    type: 'scatter',
+                                    data: [
+                                      { sugar: 12, fiber: 2, name: 'Product A' },
+                                      { sugar: 5, fiber: 8, name: 'Product B' },
+                                      { sugar: 18, fiber: 1, name: 'Product C' },
+                                      { sugar: 2, fiber: 14, name: 'Product D' },
+                                      { sugar: 9, fiber: 6, name: 'Product E' },
+                                      { sugar: 14, fiber: 4, name: 'Product F' },
+                                      { sugar: 7, fiber: 9, name: 'Product G' },
+                                    ],
+                                    xAxisLabel: 'Sugar (g)',
+                                    yAxisLabel: 'Fiber (g)'
+                                  });
+                                  setIsChartDialogOpen(true);
+                                  setChartQuestion('');
+                                  setChartAnswer('');
+                                }}
+                              >
+                                <ArrowRight className="h-3 w-3 mr-1" /> 
+                                Ask a question about this chart
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* Data Tab Content */}
+        <TabsContent value="data" className="mt-6">
+          <div className="space-y-6">
+            {/* Data Preview Card */}
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle>Data Table</CardTitle>
+                    <CardDescription>Full view of the processed data</CardDescription>
+                  </div>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        <Download className="h-4 w-4 mr-2" />
+                        Export
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem>
+                        Export as CSV
+                      </DropdownMenuItem>
+                      <DropdownMenuItem>
+                        Export as Excel
+                      </DropdownMenuItem>
+                      <DropdownMenuItem>
+                        Export as JSON
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-200">
+                        {dataPreview?.headers?.map((header, index) => (
+                          <th key={index} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            {header}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dataPreview?.rows?.slice(0, 20).map((row, rowIndex) => (
+                        <tr key={rowIndex} className={rowIndex % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                          {Object.values(row).map((cell, cellIndex) => (
+                            <td key={cellIndex} className="px-4 py-2 whitespace-nowrap text-sm text-gray-700">
+                              {cell !== null && cell !== undefined 
+                                ? typeof cell === 'object' 
+                                  ? JSON.stringify(cell).substring(0, 50) 
+                                  : String(cell).substring(0, 50)
+                                : 'N/A'
+                              }
+                              {cell !== null && cell !== undefined && typeof cell === 'string' && cell.length > 50 ? '...' : ''}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {dataPreview?.rows && dataPreview.rows.length > 20 && (
+                    <div className="p-3 flex justify-between items-center border-t border-gray-200">
+                      <div className="text-sm text-gray-500">
+                        Showing 20 of {dataPreview.rows.length} rows
+                      </div>
+                      <Pagination>
+                        <PaginationContent>
+                          <PaginationItem>
+                            <PaginationPrevious href="#" />
+                          </PaginationItem>
+                          <PaginationItem>
+                            <PaginationLink href="#">1</PaginationLink>
+                          </PaginationItem>
+                          <PaginationItem>
+                            <PaginationLink href="#" isActive>2</PaginationLink>
+                          </PaginationItem>
+                          <PaginationItem>
+                            <PaginationLink href="#">3</PaginationLink>
+                          </PaginationItem>
+                          <PaginationItem>
+                            <PaginationNext href="#" />
+                          </PaginationItem>
+                        </PaginationContent>
+                      </Pagination>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* Insights Tab Content */}
+        <TabsContent value="insights" className="mt-6">
+          <div className="space-y-6">
+            {/* Insights Card */}
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle>Data Insights</CardTitle>
+                    <CardDescription>Key findings and patterns discovered in your data</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-6">
+                  {insights && insights.length > 0 ? (
+                    insights.map((insight, index) => (
+                      <div key={index} className="bg-gray-50 p-4 rounded-lg">
+                        <div className="flex items-start">
+                          <Lightbulb className="h-5 w-5 text-amber-500 mr-3 flex-shrink-0 mt-0.5" />
+                          <div>
+                            <p className="font-medium text-gray-800">{insight.text}</p>
+                            
+                            {insight.details && (
+                              <p className="text-gray-600 text-sm mt-2">{insight.details}</p>
+                            )}
+                            
+                            {/* Removed Relevance indicator as requested */}
+                            
+                            {insight.dataPoints && (
+                              <div className="mt-3">
+                                <span className="text-xs font-medium text-gray-500 block mb-2">Supporting Data</span>
+                                <div className="bg-white p-3 rounded border border-gray-200 text-sm">
+                                  <ul className="list-disc list-inside space-y-1">
+                                    {insight.dataPoints.map((point, idx) => (
+                                      <li key={idx} className="text-gray-700">{point}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* Removed Recommendations section as requested */}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-10 text-gray-500">
+                      <AlertCircle className="h-12 w-12 mx-auto text-gray-300 mb-3" />
+                      <p>No insights available for this dataset</p>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* Profile Tab Content */}
+        <TabsContent value="profile" className="mt-6">
+          <div className="space-y-6">
+            {/* Data Profile Card */}
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <CardTitle>Data Profile</CardTitle>
+                    <CardDescription>Detailed analysis of data structure and quality</CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-6">
+                  {/* Profile Summary */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-blue-50 p-4 rounded-lg">
+                      <div className="text-blue-600 text-3xl font-semibold">
+                        {dataProfile?.rowCount || 0}
+                      </div>
+                      <div className="text-gray-600 text-sm">Total Rows</div>
+                    </div>
+                    <div className="bg-green-50 p-4 rounded-lg">
+                      <div className="text-green-600 text-3xl font-semibold">
+                        {dataProfile?.columnCount || 0}
+                      </div>
+                      <div className="text-gray-600 text-sm">Total Columns</div>
+                    </div>
+                    <div className="bg-purple-50 p-4 rounded-lg">
+                      <div className="text-purple-600 text-3xl font-semibold">
+                        {dataProfile?.missingValuesPercentage !== undefined 
+                          ? (dataProfile.missingValuesPercentage * 100).toFixed(1) + '%'
+                          : 'N/A'
+                        }
+                      </div>
+                      <div className="text-gray-600 text-sm">Missing Values</div>
+                    </div>
+                  </div>
+                  
+                  {/* Column Profiles */}
+                  <div>
+                    <h3 className="text-sm font-medium text-gray-500 mb-3">COLUMN PROFILES</h3>
+                    <div className="space-y-4">
+                      {dataProfile?.columns?.map((column, index) => (
+                        <div key={index} className="bg-gray-50 p-4 rounded-lg">
+                          <div className="flex justify-between items-start mb-3">
+                            <div>
+                              <h4 className="font-medium text-gray-800">{column.name}</h4>
+                              <div className="flex items-center mt-1 space-x-2">
+                                <Badge variant="outline" className="bg-gray-100 text-gray-800 text-xs">
+                                  {column.dataType}
+                                </Badge>
+                                {column.isNumeric && (
+                                  <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-100 text-xs">
+                                    Numeric
+                                  </Badge>
+                                )}
+                                {column.isCategorical && (
+                                  <Badge variant="outline" className="bg-purple-50 text-purple-600 border-purple-100 text-xs">
+                                    Categorical
+                                  </Badge>
+                                )}
+                                {column.isDate && (
+                                  <Badge variant="outline" className="bg-amber-50 text-amber-600 border-amber-100 text-xs">
+                                    Date
+                                  </Badge>
+                                )}
+                                {column.isId && (
+                                  <Badge variant="outline" className="bg-gray-100 text-gray-800 border-gray-200 text-xs">
+                                    ID
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                            <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+                              <ArrowDown className="h-4 w-4" />
+                            </Button>
+                          </div>
+                          
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3">
+                            <div className="text-sm">
+                              <div className="text-gray-500 mb-1">Missing Values</div>
+                              <div className="font-medium">
+                                {(column.missingPercentage * 100).toFixed(1)}%
+                              </div>
+                            </div>
+                            <div className="text-sm">
+                              <div className="text-gray-500 mb-1">Unique Values</div>
+                              <div className="font-medium">{column.uniqueValues}</div>
+                            </div>
+                            {column.isNumeric && (
+                              <>
+                                <div className="text-sm">
+                                  <div className="text-gray-500 mb-1">Min</div>
+                                  <div className="font-medium">{column.min !== undefined ? column.min : 'N/A'}</div>
+                                </div>
+                                <div className="text-sm">
+                                  <div className="text-gray-500 mb-1">Max</div>
+                                  <div className="font-medium">{column.max !== undefined ? column.max : 'N/A'}</div>
+                                </div>
+                                <div className="text-sm">
+                                  <div className="text-gray-500 mb-1">Mean</div>
+                                  <div className="font-medium">{column.mean !== undefined ? Number(column.mean).toFixed(2) : 'N/A'}</div>
+                                </div>
+                                <div className="text-sm">
+                                  <div className="text-gray-500 mb-1">Median</div>
+                                  <div className="font-medium">{column.median !== undefined ? column.median : 'N/A'}</div>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                          
+                          {column.uniqueValuesList && column.uniqueValuesList.length > 0 && (
+                            <div className="mt-4">
+                              <div className="text-gray-500 text-sm mb-2">Sample Values:</div>
+                              <div className="flex flex-wrap gap-2">
+                                {column.uniqueValuesList.slice(0, 10).map((value, i) => (
+                                  <span key={i} className="inline-block px-2 py-1 bg-gray-100 text-gray-800 text-xs rounded-full">
+                                    {value}
+                                  </span>
+                                ))}
+                                {column.uniqueValuesList.length > 10 && (
+                                  <span className="inline-block px-2 py-1 bg-gray-100 text-gray-500 text-xs rounded-full">
+                                    +{column.uniqueValuesList.length - 10} more
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+      </Tabs>
+      
+      {/* Chart Question Dialog */}
+      <Dialog open={isChartDialogOpen} onOpenChange={setIsChartDialogOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Ask a Question About This Chart</DialogTitle>
+            <DialogDescription>
+              {selectedChart?.title && (
+                <span className="font-medium text-blue-600">{selectedChart.title}</span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <Input
+              placeholder="E.g., What's the highest value? What's the trend? etc."
+              value={chartQuestion}
+              onChange={(e) => setChartQuestion(e.target.value)}
+              className="w-full"
+            />
+            
+            {chartAnswer && (
+              <div className="p-4 bg-blue-50 rounded-md">
+                <h4 className="font-medium mb-2 text-blue-800">Analysis:</h4>
+                <p className="text-sm text-gray-700">{chartAnswer}</p>
+              </div>
+            )}
+          </div>
+          
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setIsChartDialogOpen(false)}
+            >
+              Close
+            </Button>
+            <Button
+              onClick={() => {
+                if (chartQuestion.trim() && selectedChart) {
+                  setIsAskingChartQuestion(true);
+                  
+                  // Call the visualization agent to analyze the chart
+                  axios.post('/api/visualization/ask', {
+                    question: chartQuestion,
+                    chartData: selectedChart,
+                    data: dataPreview?.rows
+                  })
+                    .then(res => {
+                      if (res.data.success) {
+                        setChartAnswer(res.data.answer);
+                      } else {
+                        setChartAnswer('Sorry, I could not analyze this chart based on your question. Please try asking something else.');
+                      }
+                      setIsAskingChartQuestion(false);
+                    })
+                    .catch(err => {
+                      console.error('Error asking chart question:', err);
+                      setChartAnswer('An error occurred while analyzing this chart. Please try again later.');
+                      setIsAskingChartQuestion(false);
+                    });
+                }
+              }}
+              disabled={isAskingChartQuestion || !chartQuestion.trim()}
+            >
+              {isAskingChartQuestion ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Analyzing...
+                </>
+              ) : (
+                'Ask Question'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}

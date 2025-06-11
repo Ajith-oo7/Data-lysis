@@ -1,0 +1,269 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 230 25% 98%;
+  --foreground: 240 10% 3.9%;
+  --muted: 217 33% 97%;
+  --muted-foreground: 240 5% 64.9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 240 10% 3.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 240 10% 3.9%;
+  --border: 215 32% 91.4%;
+  --input: 215 32% 91.4%;
+  --primary: 262 83% 58%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 217 76% 95%;
+  --secondary-foreground: 262 83% 58%;
+  --accent: 190 80% 50%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 84.2% 60.2%;
+  --destructive-foreground: 0 0% 100%;
+  --success: 142 71% 45%;
+  --success-foreground: 210 20% 98%;
+  --ring: 262 83% 58%;
+  --radius: 0.5rem;
+}
+
+.dark {
+  --background: 240 10% 3.9%;
+  --foreground: 0 0% 98%;
+  --muted: 240 3.7% 15.9%;
+  --muted-foreground: 240 5% 64.9%;
+  --popover: 240 10% 3.9%;
+  --popover-foreground: 0 0% 98%;
+  --card: 240 10% 3.9%;
+  --card-foreground: 0 0% 98%;
+  --border: 240 3.7% 15.9%;
+  --input: 240 3.7% 15.9%;
+  --primary: 262 83% 58%;
+  --primary-foreground: 0 0% 98%;
+  --secondary: 240 3.7% 15.9%;
+  --secondary-foreground: 0 0% 98%;
+  --accent: 190 80% 50%;
+  --accent-foreground: 0 0% 98%;
+  --destructive: 0 62.8% 30.6%;
+  --destructive-foreground: 0 0% 98%;
+  --success: 142 71% 45%;
+  --success-foreground: 210 20% 98%;
+  --ring: 262 83% 58%;
+  --radius: 0.5rem;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply font-sans antialiased bg-background text-foreground;
+    background-image: radial-gradient(
+      circle at top right,
+      hsl(var(--primary) / 0.05),
+      transparent 40%
+    ),
+    radial-gradient(
+      circle at bottom left,
+      hsl(var(--accent) / 0.05),
+      transparent 40%
+    );
+    background-attachment: fixed;
+  }
+}
+
+/* Custom Animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    transform: scale(0);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+.fade-in-up-animation {
+  animation: fadeInUp 0.8s ease-out forwards;
+}
+
+.scale-in-animation {
+  animation: scaleIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+/* Bounce animation for upload icon */
+@keyframes bounce-slow {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-10px);
+  }
+}
+
+.animate-bounce-slow {
+  animation: bounce-slow 3s infinite ease-in-out;
+}
+
+/* Hover animations */
+.hover-lift {
+  transition: transform 0.3s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-5px);
+}
+
+.hover-shadow {
+  transition: box-shadow 0.3s ease;
+}
+
+.hover-shadow:hover {
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+/* Text gradient */
+.text-gradient {
+  background-image: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--accent)) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Futuristic animations and effects */
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+  100% { transform: translateY(0px); }
+}
+
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 10px 0 hsla(var(--primary), 0.5); }
+  50% { box-shadow: 0 0 20px 5px hsla(var(--primary), 0.7); }
+}
+
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+
+@keyframes gradient-shift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.animate-float {
+  animation: float 5s ease-in-out infinite;
+}
+
+.animate-float-delayed {
+  animation: float 5s ease-in-out 1s infinite;
+}
+
+.animate-float-slow {
+  animation: float 8s ease-in-out infinite;
+}
+
+.animate-glow {
+  animation: glow 2s ease-in-out infinite;
+}
+
+.animate-pulse-slow {
+  animation: pulse 4s ease-in-out infinite;
+}
+
+.animate-gradient {
+  background-size: 200% 200%;
+  animation: gradient-shift 8s ease infinite;
+}
+
+@keyframes ping-slow {
+  75%, 100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+.animate-ping-slow {
+  animation: ping-slow 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+/* Futuristic card and UI elements */
+.glassmorphism {
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1);
+}
+
+.dark .glassmorphism {
+  background: rgba(17, 17, 27, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.neon-border {
+  position: relative;
+}
+
+.neon-border::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  right: -2px;
+  bottom: -2px;
+  background: linear-gradient(45deg, hsl(var(--primary)), hsl(var(--accent)));
+  z-index: -1;
+  border-radius: calc(var(--radius) + 2px);
+  animation: glow 2s linear infinite;
+}
+
+/* Interactive 3D effect */
+.card-3d {
+  transition: transform 0.5s;
+  transform-style: preserve-3d;
+  perspective: 1000px;
+}
+
+.card-3d:hover {
+  transform: rotateY(5deg) rotateX(5deg);
+}
+
+/* Cool button effects */
+.btn-futuristic {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+  background: linear-gradient(90deg, hsl(var(--primary)), hsl(var(--accent)));
+  background-size: 200% 100%;
+  animation: gradient-shift 5s ease infinite;
+}
+
+.btn-futuristic::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  transition: all 0.6s;
+}
+
+.btn-futuristic:hover::before {
+  left: 100%;
+}
