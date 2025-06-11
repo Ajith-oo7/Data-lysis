@@ -2,7 +2,7 @@
 
 A comprehensive, AI-powered data analysis platform that combines the power of Python, SQL, and machine learning to provide intelligent insights from your data.
 
-![Datalysis Dashboard](generated-icon.png)
+
 
 ## ✨ Features
 
